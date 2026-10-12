@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>CallSource Data Upload Center</title>
+<link rel="icon" href="logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@500;600;700;800&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@500&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ============ SIGN IN ============ -->
+<div id="auth" class="auth" hidden>
+  <div class="auth-brand">
+    <img src="logo.png" alt="CallSource Automotive">
+    <h1>Data Upload Center</h1>
+    <p>Track every dealer list from the day it comes in to the day it's uploaded.</p>
+  </div>
+  <form id="authform" class="auth-card" novalidate>
+    <h2 id="auth-title">Sign in</h2>
+    <label class="fld" id="row-name" hidden><span>Full name</span><input id="a-name" autocomplete="name"></label>
+    <label class="fld"><span>Work email</span><input id="a-email" type="email" autocomplete="email" required placeholder="you@callsourceauto.com"></label>
+    <label class="fld" id="row-pass"><span>Password</span><input id="a-pass" type="password" autocomplete="current-password" minlength="8" required></label>
+    <p class="auth-msg" id="auth-msg" role="status"></p>
+    <button class="btn block" id="auth-go" type="submit">Sign in</button>
+    <div class="auth-links">
+      <button type="button" class="link" id="to-signup">Create an account</button>
+      <button type="button" class="link" id="to-reset">Forgot password?</button>
+    </div>
+  </form>
+</div>
+
+<!-- ============ APP ============ -->
+<div id="app" class="shell" hidden>
+  <aside class="side">
+    <div class="side-brand"><img src="logo.png" alt="CallSource Automotive"><span>Data Upload Center</span></div>
+    <nav class="nav" id="nav">
+      <button data-page="uploads" class="active"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 4h14M3 10h14M3 16h9"/></svg>Uploads<em id="n-open"></em></button>
+      <button data-page="hubspot"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="3"/><path d="M10 2v5M10 13v5M2 10h5M13 10h5"/></svg>HubSpot queue<em id="n-hs"></em></button>
+      <button data-page="checker"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10l4 4 8-9"/></svg>File checker</button>
+      <button data-page="template"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 2h7l4 4v12H5zM12 2v4h4"/></svg>Template</button>
+    </nav>
+    <div class="side-foot">
+      <div class="me" id="me"></div>
+      <button class="link light" id="signout">Sign out</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="demo-bar" id="demobar" hidden>Demo data. Nothing is saved. Add your Supabase keys to <code>config.js</code> to go live (see README).</div>
+
+    <!-- UPLOADS -->
+    <section class="page" id="p-uploads">
+      <header class="phead">
+        <div><h1>Uploads</h1><p class="sub" id="u-sub">Every dealer list, from the day it comes in to the day it's uploaded.</p></div>
+        <div class="actions"><button class="btn ghost" id="export">Export CSV</button><button class="btn" id="add">+ Log upload</button></div>
+      </header>
+      <div class="kpis" id="kpis"></div>
+      <div class="grid">
+        <div class="card c-7"><div class="ctitle">Uploaded per week <span>last 8 weeks</span></div><div id="weekly"></div></div>
+        <div class="card c-5"><div class="ctitle">Open files by list type</div><div id="bytype"></div></div>
+      </div>
+      <div class="card flush">
+        <div class="tbar">
+          <div class="seg" id="seg" role="tablist" aria-label="Status filter"></div>
+          <div class="tbar-r">
+            <input id="q" type="search" placeholder="Search dealer, file, note" aria-label="Search">
+            <select id="ft" aria-label="List type"><option value="">All list types</option></select>
+            <select id="fp" aria-label="Period"><option value="all">All time</option><option value="month">This month</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option></select>
+          </div>
+        </div>
+        <div class="table-wrap"><table class="tbl">
+          <thead><tr>
+            <th data-sort="dealer">Dealer</th><th data-sort="list_type">List type</th><th data-sort="status">Status</th>
+            <th data-sort="received_on">Came in</th><th data-sort="uploaded_on">Uploaded</th><th data-sort="turn" class="num">Turnaround</th>
+            <th data-sort="row_count" class="num">Rows</th><th data-sort="issue_count" class="num">Issues</th><th>Owner</th>
+          </tr></thead>
+          <tbody id="rows"></tbody>
+        </table></div>
+        <div class="empty" id="empty" hidden></div>
+      </div>
+    </section>
+
+    <!-- HUBSPOT -->
+    <section class="page" id="p-hubspot" hidden>
+      <header class="phead">
+        <div><h1>HubSpot queue</h1><p class="sub">Tickets in the <b>Upload Needed</b> stage. New tickets are added to Uploads automatically every 15 minutes.</p></div>
+        <div class="actions"><span class="sync" id="syncinfo"></span><button class="btn" id="syncnow">Sync now</button></div>
+      </header>
+      <div class="kpis" id="hs-kpis"></div>
+      <div class="card flush">
+        <div class="table-wrap"><table class="tbl">
+          <thead><tr><th>Ticket</th><th>Dealer</th><th>In stage</th><th>HubSpot owner</th><th>Tracker status</th><th>Came in</th><th>Uploaded</th></tr></thead>
+          <tbody id="hs-rows"></tbody>
+        </table></div>
+        <div class="empty" id="hs-empty" hidden></div>
+      </div>
+    </section>
+
+    <!-- CHECKER -->
+    <section class="page" id="p-checker" hidden>
+      <header class="phead"><div><h1>File checker</h1><p class="sub">Check a dealer CSV against the upload template before it goes in. Files stay on your computer.</p></div></header>
+      <div class="grid">
+        <div class="c-8 stackcol">
+          <label class="drop" id="drop" tabindex="0"><b>Drop a dealer CSV here</b><span>or click to choose a file</span><input type="file" id="file" accept=".csv,text/csv" hidden></label>
+          <div class="row">
+            <label class="fld grow"><span>List type</span><select id="c-type"><option value="">Detect from file name</option></select></label>
+            <button class="btn ghost" id="sample">Try a sample file</button>
+          </div>
+        </div>
+        <div class="card c-4"><div class="ctitle">What gets checked</div>
+          <ul class="checks">
+            <li class="ok">File name follows <code>Dealer_ListType_MMDDYYYY.csv</code></li>
+            <li class="ok">Six required headers plus <code>email</code>, spelled exactly</li>
+            <li class="ok">List-specific columns present or left out</li>
+            <li class="ok">VIN, phone, year, email and date formats</li>
+            <li class="ok">Duplicate customers</li>
+          </ul></div>
+      </div>
+      <div id="result"></div>
+    </section>
+
+    <!-- TEMPLATE -->
+    <section class="page" id="p-template" hidden>
+      <header class="phead"><div><h1>Upload template</h1><p class="sub">What dealers send, and how each list type differs.</p></div></header>
+      <div class="card"><div class="ctitle">Header row <span>first line of every file</span></div>
+        <div class="codeline"><code id="hdrline"></code><button class="btn sm" id="copyhdr">Copy</button></div></div>
+      <div class="grid">
+        <div class="card c-6"><div class="ctitle">How dealers send data</div>
+          <ol class="steps">
+            <li><b>CSV only.</b> In Excel or Google Sheets: File &gt; Download / Save As &gt; CSV.</li>
+            <li><b>File name:</b> <code>DealerName_ListType_MMDDYYYY.csv</code>, e.g. <code>SmithHonda_Recall_10082026.csv</code>.</li>
+            <li><b>Headers</b> copied exactly. No renaming, reordering or extra spaces.</li>
+            <li><b>One list type per file.</b> Don't mix recalls and declined services.</li>
+          </ol></div>
+        <div class="card c-6"><div class="ctitle">Legend</div>
+          <table class="tbl compact"><tbody>
+            <tr><td class="req-R">Required</td><td>Fill on every row.</td></tr>
+            <tr><td class="req-R">Required header</td><td>Column must exist; cells may be blank (<code>email</code>).</td></tr>
+            <tr><td class="req-IP">If provided</td><td>Include and fill when the data exists.</td></tr>
+            <tr><td class="req-L">Leave out</td><td>Not used for that list type.</td></tr>
+            <tr><td class="req-N">Not needed</td><td>VIN may be blank on Missed / Confirmed Appt lists.</td></tr>
+          </tbody></table></div>
+      </div>
+      <div class="card flush"><div class="ctitle pad">Requirements by list type</div><div class="table-wrap"><table class="tbl" id="reqgrid"></table></div></div>
+      <div class="card flush"><div class="ctitle pad">Column guide</div><div class="table-wrap"><table class="tbl" id="colguide"></table></div></div>
+    </section>
+  </main>
+</div>
+
+<!-- ============ DRAWER ============ -->
+<div class="scrim" id="scrim" hidden></div>
+<aside class="drawer" id="drawer" hidden aria-labelledby="d-title" role="dialog">
+  <header class="dhead"><h2 id="d-title">Log upload</h2><button class="iconbtn" id="d-close" aria-label="Close">×</button></header>
+  <form id="dform" class="dbody" autocomplete="off">
+    <div class="hsnote" id="d-hs" hidden></div>
+    <label class="fld"><span>Dealer</span><input id="f-dealer" required list="dealers"></label>
+    <div class="two">
+      <label class="fld"><span>List type</span><select id="f-type"><option value="">Choose…</option></select></label>
+      <label class="fld"><span>Status</span><select id="f-status"></select></label>
+    </div>
+    <div class="two">
+      <label class="fld"><span>List came in</span><input id="f-received" type="date"></label>
+      <label class="fld"><span>Uploaded on</span><input id="f-uploaded" type="date"></label>
+    </div>
+    <div class="two">
+      <label class="fld"><span>Expected by</span><input id="f-due" type="date"></label>
+      <label class="fld"><span>Owner</span><select id="f-owner"><option value="">Unassigned</option></select></label>
+    </div>
+    <div class="two">
+      <label class="fld"><span>Rows</span><input id="f-rows" type="number" min="0" inputmode="numeric"></label>
+      <label class="fld"><span>Rows with issues</span><input id="f-issues" type="number" min="0" inputmode="numeric"></label>
+    </div>
+    <label class="fld"><span>File name</span><input id="f-file" placeholder="DealerName_ListType_MMDDYYYY.csv"></label>
+    <label class="fld"><span>Notes</span><textarea id="f-notes" rows="3"></textarea></label>
+    <div class="dactions">
+      <button type="button" class="btn danger" id="d-del" hidden>Delete</button>
+      <span class="spacer"></span>
+      <button type="button" class="btn ghost" id="d-cancel">Cancel</button>
+      <button type="submit" class="btn" id="d-save">Save</button>
+    </div>
+    <div id="d-activity"></div>
+  </form>
+  <datalist id="dealers"></datalist>
+</aside>
+<div class="toast" id="toast" hidden role="status"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script src="rules.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
