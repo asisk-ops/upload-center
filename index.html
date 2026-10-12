@@ -112,11 +112,11 @@
         </div>
         <div class="card c-4"><div class="ctitle">What gets checked</div>
           <ul class="checks">
-            <li class="ok">File name follows <code>Dealer_ListType_MMDDYYYY.csv</code></li>
-            <li class="ok">Six required headers plus <code>email</code>, spelled exactly</li>
-            <li class="ok">List-specific columns present or left out</li>
-            <li class="ok">VIN, phone, year, email and date formats</li>
-            <li class="ok">Duplicate customers</li>
+            <li class="ok"><span>File name follows <code>Dealer_ListType_MMDDYYYY.csv</code></span></li>
+            <li class="ok"><span>Required headers plus <code>email</code>, spelled exactly (any case, any order)</span></li>
+            <li class="ok"><span>List-specific columns present or left out</span></li>
+            <li class="ok"><span>VIN, phone, year, email and date formats</span></li>
+            <li class="ok"><span>Expired warranty dates and duplicate customers</span></li>
           </ul></div>
       </div>
       <div id="result"></div>
@@ -124,27 +124,30 @@
 
     <!-- TEMPLATE -->
     <section class="page" id="p-template" hidden>
-      <header class="phead"><div><h1>Upload template</h1><p class="sub">What dealers send, and how each list type differs.</p></div></header>
-      <div class="card"><div class="ctitle">Header row <span>first line of every file</span></div>
+      <header class="phead"><div><h1>Upload template</h1><p class="sub">From the CallSource Upload List Column Header Guide: what each outbound list needs.</p></div></header>
+      <div class="card"><div class="ctitle">Header row to send a dealer <select id="hdrtype" aria-label="List type for header row" style="width:auto;font-size:13px;padding:4px 8px;text-transform:none;letter-spacing:0"></select></div>
         <div class="codeline"><code id="hdrline"></code><button class="btn sm" id="copyhdr">Copy</button></div></div>
       <div class="grid">
         <div class="card c-6"><div class="ctitle">How dealers send data</div>
           <ol class="steps">
             <li><b>CSV only.</b> In Excel or Google Sheets: File &gt; Download / Save As &gt; CSV.</li>
             <li><b>File name:</b> <code>DealerName_ListType_MMDDYYYY.csv</code>, e.g. <code>SmithHonda_Recall_10082026.csv</code>.</li>
-            <li><b>Headers</b> copied exactly. No renaming, reordering or extra spaces.</li>
+            <li><b>Headers</b> spelled exactly, with underscores and no extra spaces or characters. Case and column order don't matter.</li>
+            <li><b>Email header on every list,</b> even when there are no email addresses.</li>
+            <li><b>Service type:</b> include service recommendations when they're provided.</li>
             <li><b>One list type per file.</b> Don't mix recalls and declined services.</li>
           </ol></div>
         <div class="card c-6"><div class="ctitle">Legend</div>
           <table class="tbl compact"><tbody>
-            <tr><td class="req-R">Required</td><td>Fill on every row.</td></tr>
-            <tr><td class="req-R">Required header</td><td>Column must exist; cells may be blank (<code>email</code>).</td></tr>
-            <tr><td class="req-IP">If provided</td><td>Include and fill when the data exists.</td></tr>
-            <tr><td class="req-L">Leave out</td><td>Not used for that list type.</td></tr>
-            <tr><td class="req-N">Not needed</td><td>VIN may be blank on Missed / Confirmed Appt lists.</td></tr>
+            <tr><td class="req-R">Required</td><td>Column must be there and filled on every row.</td></tr>
+            <tr><td class="req-R">Email</td><td>Header required on every list; addresses are optional.</td></tr>
+            <tr><td class="req-P">Preferred</td><td>Not required, but highly preferred.</td></tr>
+            <tr><td class="req-IP">If provided</td><td>Include when the dealer provides it.</td></tr>
+            <tr><td class="req-L">—</td><td>Not part of that list.</td></tr>
           </tbody></table></div>
       </div>
-      <div class="card flush"><div class="ctitle pad">Requirements by list type</div><div class="table-wrap"><table class="tbl" id="reqgrid"></table></div></div>
+      <div class="card flush"><div class="ctitle pad">Requirements by list type <span>name, phone_number and email go on every list</span></div><div class="table-wrap"><table class="tbl" id="reqgrid"></table></div>
+        <ul class="typenotes" id="typenotes"></ul></div>
       <div class="card flush"><div class="ctitle pad">Column guide</div><div class="table-wrap"><table class="tbl" id="colguide"></table></div></div>
     </section>
   </main>

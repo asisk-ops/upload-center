@@ -75,17 +75,17 @@ function demoApi() {
   const people = [["d1", "alyssa@" + DOMAIN, "Alyssa (demo)"], ["d2", "jordan@" + DOMAIN, "Jordan (demo)"], ["d3", "sam@" + DOMAIN, "Sam (demo)"]];
   const mk = (dealer, list_type, status, recv, up, extra = {}) => ({ id: crypto.randomUUID(), dealer, list_type, status, received_on: recv == null ? null : addDays(t, recv), uploaded_on: up == null ? null : addDays(t, up), due_on: null, row_count: null, issue_count: 0, file_name: "", owner_id: "d1", notes: "", source: "manual", created_at: new Date().toISOString(), ...extra });
   const rows = [
-    mk("Example Honda", "Recall", "Loaded", -20, -18, { row_count: 1240, file_name: "ExampleHonda_Recall_09222026.csv" }),
-    mk("Example Toyota", "Service Due (A / B)", "Loaded", -16, -15, { row_count: 3105, owner_id: "d2" }),
+    mk("Example Honda", "Recalls", "Loaded", -20, -18, { row_count: 1240, file_name: "ExampleHonda_Recall_09222026.csv" }),
+    mk("Example Toyota", "CXPro / Service Lifestyle Engine", "Loaded", -16, -15, { row_count: 3105, owner_id: "d2" }),
     mk("Example Ford", "Declined Services", "Loaded", -12, -9, { row_count: 860, owner_id: "d3" }),
-    mk("Example Hyundai", "PPM Package", "Loaded", -6, -5, { row_count: 512 }),
-    mk("Example Subaru", "Recall", "Loaded", -3, -2, { row_count: 977, owner_id: "d2" }),
+    mk("Example Hyundai", "CSI", "Loaded", -6, -5, { row_count: 512 }),
+    mk("Example Subaru", "Recalls", "Loaded", -3, -2, { row_count: 977, owner_id: "d2" }),
     mk("Example Nissan", "Special Order Parts", "Ready", -1, null, { row_count: 140, owner_id: "d3" }),
-    mk("Example Chevrolet", "Service Due (A / B)", "Issues", -2, null, { row_count: 2210, issue_count: 184, notes: "Phone numbers missing on 184 rows; sent back to dealer." }),
-    mk("Example Kia", "Missed Appointments", "Received", 0, null, { row_count: 96, owner_id: "d2" }),
-    mk("Example Mazda", "Warranty / PPM Expiration", "Expected", null, null, { due_on: addDays(t, -2), source: "hubspot", hubspot_ticket_id: "1001", hubspot_ticket_name: "Example Mazda – warranty list", hubspot_owner: "Jordan (demo)", hubspot_created_at: addDays(t, -6) + "T15:00:00Z", hubspot_in_stage: true, owner_id: "d2" }),
+    mk("Example Chevrolet", "CXPro / Service Lifestyle Engine", "Issues", -2, null, { row_count: 2210, issue_count: 184, notes: "Phone numbers missing on 184 rows; sent back to dealer." }),
+    mk("Example Kia", "Missed & Appointment Confirmation", "Received", 0, null, { row_count: 96, owner_id: "d2" }),
+    mk("Example Mazda", "Warranty Expiration", "Expected", null, null, { due_on: addDays(t, -2), source: "hubspot", hubspot_ticket_id: "1001", hubspot_ticket_name: "Example Mazda – warranty list", hubspot_owner: "Jordan (demo)", hubspot_created_at: addDays(t, -6) + "T15:00:00Z", hubspot_in_stage: true, owner_id: "d2" }),
     mk("Example Jeep", null, "Expected", null, null, { source: "hubspot", hubspot_ticket_id: "1002", hubspot_ticket_name: "Example Jeep – monthly upload", hubspot_owner: "Sam (demo)", hubspot_created_at: addDays(t, -1) + "T15:00:00Z", hubspot_in_stage: true, owner_id: "d3" }),
-    mk("Example Acura", "Recall", "Received", -1, null, { source: "hubspot", hubspot_ticket_id: "1003", hubspot_ticket_name: "Example Acura – recall list", hubspot_owner: "Alyssa (demo)", hubspot_created_at: addDays(t, -3) + "T15:00:00Z", hubspot_in_stage: true, row_count: 430 })];
+    mk("Example Acura", "Recalls", "Received", -1, null, { source: "hubspot", hubspot_ticket_id: "1003", hubspot_ticket_name: "Example Acura – recall list", hubspot_owner: "Alyssa (demo)", hubspot_created_at: addDays(t, -3) + "T15:00:00Z", hubspot_in_stage: true, row_count: 430 })];
   return {
     async load() { S.uploads = rows; S.profiles = Object.fromEntries(people.map(([id, email, full_name]) => [id, { id, email, full_name }])); S.me = S.profiles.d1; S.sync = { started_at: new Date(Date.now() - 6 * 6e4).toISOString(), finished_at: new Date().toISOString(), found: 3, created: 0 }; },
     subscribe() {},
@@ -139,6 +139,8 @@ async function enter(session) {
   if (LIVE) {
     const email = (session.user.email || "").toLowerCase();
     if (!email.endsWith("@" + DOMAIN)) { await sb.auth.signOut(); $("auth").hidden = false; $("app").hidden = true; return setMode("signin", `Only @${DOMAIN} accounts can use the Upload Center.`); }
+    const { data: member, error: memberErr } = await sb.rpc("du_is_team");
+    if (!memberErr && member === false) { await sb.auth.signOut(); $("auth").hidden = false; $("app").hidden = true; return setMode("signin", "This account doesn't have access to the Upload Center. Ask an Upload Center admin to add you."); }
     S.me = { id: session.user.id, email, full_name: session.user.user_metadata?.full_name || "" };
   }
   $("auth").hidden = true; $("app").hidden = false;
@@ -388,10 +390,11 @@ $("syncnow").addEventListener("click", async () => {
 function renderResult(R) {
   const box = $("result");
   if (R.fatal) return box.replaceChildren(el("div", { class: "verdict bad" }, el("div", {}, [el("h2", { text: "Can't check this file" }), el("p", { text: R.fatal })])));
-  const errN = R.errRows.size, fixN = R.fixRows.size, colBad = R.missingCols.length > 0;
-  const cls = colBad || errN ? "bad" : fixN || R.checks.some(c => c[0] !== "ok") ? "warn" : "good";
+  const errN = R.errRows.size, fixN = R.fixRows.size, warnN = R.warnRows.size, dropN = R.drop.size, colBad = R.missingCols.length > 0;
+  const cls = colBad || errN ? "bad" : fixN || warnN || R.checks.some(c => c[0] !== "ok") ? "warn" : "good";
   const head = colBad ? "Send back to dealer" : errN ? `${fmt(errN)} of ${fmt(R.total)} rows need fixing` : fixN ? "Ready after cleanup" : "Clean and ready to upload";
-  const sub = colBad ? "Required columns are missing, so this list can't be uploaded." : errN ? "These rows have problems only the dealer can fix." : fixN ? `${fmt(fixN)} rows had formatting the checker fixed. Download the cleaned file.` : `All ${fmt(R.total)} rows pass every check.`;
+  const sub = colBad ? "Required columns are missing, so this list can't be uploaded." : errN ? "These rows have problems only the dealer can fix." : fixN ? `${fmt(fixN)} rows had formatting the checker fixed. Download the cleaned file.` : warnN ? `${fmt(warnN)} rows are worth a quick look, but nothing blocks the upload.` : `All ${fmt(R.total)} rows pass every check.`;
+  const extraNote = [dropN ? `${fmt(dropN)} rows with expiration dates before this week were removed from the cleaned file.` : "", TYPE_NOTES[R.type] || ""].filter(Boolean).join(" ");
   const S2 = summarize(R);
   const logBtn = el("button", { class: "btn", text: "Log to tracker", onclick: () => {
     go("uploads"); openDrawer.source = "checker";
@@ -403,12 +406,12 @@ function renderResult(R) {
     const a = el("a", { href: URL.createObjectURL(new Blob([csv], { type: "text/csv" })), download: R.name.replace(/\.csv$/i, "") + "_clean.csv" }); document.body.append(a); a.click(); a.remove();
   } });
   const kids = [
-    el("div", { class: "verdict " + cls }, [el("div", {}, [el("h2", { text: head }), el("p", { text: sub }), el("p", { class: "faint", style: "font-size:12px", text: `${R.name} · ${R.type} · ${fmt(R.total)} rows` })]), el("div", { class: "actions" }, [dl, logBtn])]),
+    el("div", { class: "verdict " + cls }, [el("div", {}, [el("h2", { text: head }), el("p", { text: sub }), extraNote ? el("p", { style: "font-size:13px", text: extraNote }) : null, el("p", { class: "faint", style: "font-size:12px", text: `${R.name} · ${R.type} · ${fmt(R.total)} rows` })]), el("div", { class: "actions" }, [dl, logBtn])]),
     el("div", { class: "grid" }, [
       el("div", { class: "card c-5" }, [el("div", { class: "ctitle", text: "File and headers" }), el("ul", { class: "checks" }, R.checks.map(([k, t]) => el("li", { class: k, text: t })))]),
-      el("div", { class: "card c-7 flush" }, [el("div", { class: "ctitle pad" }, ["Row issues", el("span", { text: `${fmt(errN)} to fix · ${fmt(fixN)} auto-cleaned` })]),
+      el("div", { class: "card c-7 flush" }, [el("div", { class: "ctitle pad" }, ["Row issues", el("span", { text: `${fmt(errN)} to fix · ${fmt(warnN)} to review · ${fmt(fixN)} auto-cleaned` })]),
         S2.length ? el("div", { class: "table-wrap" }, el("table", { class: "tbl" }, [el("thead", {}, el("tr", {}, [el("th", { text: "Issue" }), el("th", { class: "num", text: "Rows" }), el("th", { text: "Result" })])),
-          el("tbody", {}, S2.map(s => el("tr", {}, [el("td", { text: s.msg }), el("td", { class: "num", text: fmt(s.n) }), el("td", {}, el("span", { class: "tag " + (s.kind === "err" ? "err" : "fix"), text: s.kind === "err" ? "Dealer must fix" : "Fixed" }))])))])) : el("div", { class: "empty", text: "No row issues found." })])])];
+          el("tbody", {}, S2.map(s => el("tr", {}, [el("td", { text: s.msg }), el("td", { class: "num", text: fmt(s.n) }), el("td", {}, el("span", { class: "tag " + (s.kind === "err" ? "err" : s.kind === "warn" ? "warn" : "fix"), text: s.kind === "err" ? "Dealer must fix" : s.kind === "warn" ? "Review" : "Fixed" }))])))])) : el("div", { class: "empty", text: "No row issues found." })])])];
   const errs = R.issues.filter(i => i.kind === "err");
   if (errs.length) kids.push(el("details", { class: "card flush" }, [el("summary", { text: `Row-by-row list (${fmt(errs.length)} problems${errs.length > 500 ? ", first 500 shown" : ""})` }),
     el("div", { class: "table-wrap" }, el("table", { class: "tbl" }, [el("thead", {}, el("tr", {}, [el("th", { class: "num", text: "Row" }), el("th", { text: "Column" }), el("th", { text: "Problem" })])), el("tbody", {}, errs.slice(0, 500).map(i => el("tr", {}, [el("td", { class: "num", text: i.row }), el("td", {}, el("code", { text: i.col })), el("td", { text: i.msg })])))]))]));
@@ -424,22 +427,26 @@ drop.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") 
 ["dragleave", "drop"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove("over"); }));
 drop.addEventListener("drop", e => readFile(e.dataTransfer.files[0]));
 $("c-type").addEventListener("change", runCheck);
-$("sample").addEventListener("click", () => { $("c-type").value = ""; lastFile = { name: "SampleHonda_ServiceA_10082026.csv", text:
-  "VIN,name,phone_number,dealer_vehicle_year,dealer_vehicle_make,dealer_vehicle_model,coupon,service_type,last_service_date,recall_id\n" +
-  "1HGCV1F34MA012345,Maria Lopez,(512) 555-0142,2021,Honda,Accord,$20 off oil change,Service A,3/14/2026,\n" +
-  "5FNRL6H78NB04567,James Carter,5125550199,2022,Honda,Odyssey,,service b,2026-02-02,\n" +
+$("sample").addEventListener("click", () => { $("c-type").value = ""; lastFile = { name: "SampleHonda_DeclinedServices_10082026.csv", text:
+  "VIN,Name,Phone_Number,dealer_vehicle_year,dealer_vehicle_make,dealer_vehicle_model,coupon,service_type,last_service_date,recall_id\n" +
+  "1HGCV1F34MA012345,Maria Lopez,(512) 555-0142,2021,Honda,Accord,$20 off oil change,\"Brake pads, cabin filter\",3/14/2026,\n" +
+  "5FNRL6H78NB04567,James Carter,5125550199,2022,Honda,Odyssey,,Tire rotation,2026-02-02,\n" +
   "2HKRW2H85LH612345,Dana Kim,512555017,2020,Honda,CR-V,,,01/09/2026,\n" +
-  "1HGCV1F34MA012345,Maria Lopez,5125550142,2021,Honda,Accord,,Service A,03/14/2026,\n" }; runCheck(); });
+  "1HGCV1F34MA012345,Maria Lopez,5125550142,2021,Honda,Accord,,Wiper blades,03/14/2026,\n" }; runCheck(); });
 
 /* =========================================================
    TEMPLATE PAGE
    ========================================================= */
-$("hdrline").textContent = HEAD.join(",");
-$("copyhdr").addEventListener("click", async () => { try { await navigator.clipboard.writeText(HEAD.join(",")); toast("Header row copied"); } catch (e) { const r = document.createRange(); r.selectNodeContents($("hdrline")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); toast("Selected. Press Ctrl+C to copy"); } });
+const hdrFor = t => { const T = TYPES[t], lv = { name: "R", phone_number: "R", email: "R" }; VARS.forEach((v, i) => lv[v] = T.r[i]); YMM.forEach(c => lv[c] = T.ymm || "R"); return HEAD.filter(h => lv[h] && lv[h] !== "L").join(","); };
+TYPE_NAMES.forEach(n => $("hdrtype").append(el("option", { value: n, text: n })));
+const showHdr = () => $("hdrline").textContent = hdrFor($("hdrtype").value);
+$("hdrtype").addEventListener("change", showHdr); showHdr();
+$("copyhdr").addEventListener("click", async () => { try { await navigator.clipboard.writeText($("hdrline").textContent); toast("Header row copied"); } catch (e) { const r = document.createRange(); r.selectNodeContents($("hdrline")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); toast("Selected. Press Ctrl+C to copy"); } });
 (() => {
-  const W = { R: "Required", IP: "If provided", L: "Leave out", N: "Not needed" }, g = $("reqgrid");
-  g.append(el("thead", {}, el("tr", {}, [el("th", { text: "List type" }), ...VARS.map(v => el("th", {}, el("code", { text: v === "dealer_vehicle_vin" ? "VIN" : v })))])));
-  g.append(el("tbody", {}, TYPE_NAMES.map(n => { const T = TYPES[n]; return el("tr", {}, [el("td", { style: "font-weight:600;white-space:nowrap", text: n }), ...T.r.map((r, i) => el("td", { class: "req-" + r, text: VARS[i] === "service_type" && T.svc ? W[r] + ": " + T.svc.join(" or ") : W[r] }))]); })));
+  const g = $("reqgrid");
+  g.append(el("thead", {}, el("tr", {}, [el("th", { text: "List type" }), el("th", { text: "Year / make / model" }), ...VARS.map(v => el("th", {}, el("code", { text: v === "dealer_vehicle_vin" ? "VIN" : v })))])));
+  g.append(el("tbody", {}, TYPE_NAMES.map(n => { const T = TYPES[n], y = T.ymm || "R"; return el("tr", { title: TYPE_NOTES[n] || null }, [el("td", { style: "font-weight:600;white-space:nowrap", text: n }), el("td", { class: "req-" + y, text: LEVEL_TEXT[y] }), ...T.r.map(r => el("td", { class: "req-" + r, text: LEVEL_TEXT[r] }))]); })));
+  $("typenotes").replaceChildren(...Object.entries(TYPE_NOTES).map(([n, t]) => el("li", {}, [el("b", { text: n + ": " }), t])));
   const c = $("colguide");
   c.append(el("thead", {}, el("tr", {}, ["Upload header", "What it is", "Format", "Example"].map(h => el("th", { text: h })))));
   c.append(el("tbody", {}, GUIDE.map(r => el("tr", {}, [el("td", {}, el("code", { text: r[0] })), el("td", { text: r[1] }), el("td", { text: r[2] }), el("td", {}, el("code", { text: r[3] }))]))));
