@@ -354,6 +354,14 @@ $("d-del").addEventListener("click", async () => {
 /* =========================================================
    HUBSPOT PAGE
    ========================================================= */
+function typeSelect(r) {
+  const known = TYPE_NAMES.includes(r.list_type);
+  const sel = el("select", { class: "typesel" + (r.list_type ? "" : " missing"), "aria-label": "List type for " + r.dealer, onclick: e => e.stopPropagation() },
+    [el("option", { value: "", text: "Set list type" }), ...(r.list_type && !known ? [el("option", { value: r.list_type, text: r.list_type })] : []), ...TYPE_NAMES.map(n => el("option", { value: n, text: n }))]);
+  sel.value = r.list_type || "";
+  sel.addEventListener("change", async () => { try { await api.update(r.id, { list_type: sel.value || null }); toast(`${r.dealer}: ${sel.value || "list type cleared"}`); render(); } catch (e) { toast("Couldn't save: " + e.message); render(); } });
+  return sel;
+}
 function renderHubspot() {
   const list = S.uploads.filter(r => r.source === "hubspot" && r.hubspot_in_stage !== false).sort((a, b) => (a.hubspot_created_at || "") < (b.hubspot_created_at || "") ? -1 : 1);
   const t = today(), age = r => r.hubspot_created_at ? days(r.hubspot_created_at.slice(0, 10), t) : null;
@@ -370,6 +378,7 @@ function renderHubspot() {
     const a = age(r), tk = C.HUBSPOT_PORTAL_ID ? el("a", { href: `https://app.hubspot.com/contacts/${C.HUBSPOT_PORTAL_ID}/ticket/${r.hubspot_ticket_id}`, target: "_blank", rel: "noopener", onclick: e => e.stopPropagation(), text: r.hubspot_ticket_name || "#" + r.hubspot_ticket_id }) : el("span", { text: r.hubspot_ticket_name || "#" + r.hubspot_ticket_id });
     return el("tr", { class: "click", onclick: () => openDrawer(r) }, [
       el("td", { class: "dealer" }, [el("b", {}, tk), el("small", { text: "#" + r.hubspot_ticket_id })]), el("td", { text: r.dealer }),
+      el("td", {}, typeSelect(r)),
       el("td", {}, a == null ? "–" : el("span", { class: a > 7 ? "late" : "", text: a === 0 ? "Today" : a + (a === 1 ? " day" : " days") })),
       el("td", { text: r.hubspot_owner || "–" }), el("td", {}, r.list_url ? el("a", { class: "listlink", href: r.list_url, target: "_blank", rel: "noopener", text: "Open list ↗", onclick: e => e.stopPropagation() }) : el("span", { class: "faint", text: "No link yet" })), el("td", {}, el("span", { class: "pill st-" + r.status, text: stLabel(r.status) })),
       el("td", { text: fmtDate(r.received_on) }), el("td", { text: fmtDate(r.uploaded_on) })]);
