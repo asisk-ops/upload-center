@@ -234,7 +234,7 @@ function renderUploads() {
     up.addEventListener("change", () => quickUploaded(r, up.value));
     const tn = turn(r);
     return el("tr", { class: "click", onclick: () => openDrawer(r) }, [
-      el("td", { class: "dealer" }, [el("b", {}, [r.dealer, r.source === "hubspot" ? el("span", { class: "src", text: "HubSpot" }) : null]), r.file_name ? el("small", { text: r.file_name }) : null]),
+      el("td", { class: "dealer" }, [el("b", {}, [r.dealer, r.source === "hubspot" ? el("span", { class: "src", text: "HubSpot" }) : null]), r.file_name ? el("small", { text: r.file_name }) : null, r.list_url ? el("a", { class: "listlink", href: r.list_url, target: "_blank", rel: "noopener", text: "Open list ↗", onclick: e => e.stopPropagation() }) : null]),
       el("td", {}, r.list_type || el("span", { class: "late", text: "Set list type" })),
       el("td", {}, st),
       el("td", {}, r.received_on ? fmtDate(r.received_on) : (r.due_on ? el("span", {}, [el("span", { class: "faint", text: "due " + fmtDate(r.due_on) + " " }), isLate(r) ? el("span", { class: "late", text: "Late" }) : null]) : el("span", { class: "faint", text: "–" }))),
@@ -305,7 +305,7 @@ async function openDrawer(r, prefill) {
   $("f-dealer").value = d.dealer || ""; $("f-type").value = d.list_type || ""; $("f-status").value = d.status || "Received";
   $("f-received").value = d.received_on || ""; $("f-uploaded").value = d.uploaded_on || ""; $("f-due").value = d.due_on || "";
   $("f-owner").value = d.owner_id && S.profiles[d.owner_id] ? d.owner_id : ""; $("f-rows").value = d.row_count ?? ""; $("f-issues").value = d.issue_count ?? "";
-  $("f-file").value = d.file_name || ""; $("f-notes").value = d.notes || "";
+  $("f-file").value = d.file_name || ""; $("f-notes").value = d.notes || ""; $("f-link").value = d.list_url || "";
   const del = $("d-del"); del.hidden = !r; del.classList.remove("armed"); del.textContent = "Delete";
   const hs = $("d-hs"); hs.hidden = !(r && r.hubspot_ticket_id);
   if (r && r.hubspot_ticket_id) {
@@ -335,7 +335,7 @@ $("dform").addEventListener("submit", async e => {
   const num = v => v === "" ? null : Math.max(0, parseInt(v, 10) || 0), status = $("f-status").value;
   const body = { dealer: $("f-dealer").value.trim(), list_type: $("f-type").value || null, status, received_on: $("f-received").value || null,
     uploaded_on: $("f-uploaded").value || (status === "Loaded" ? today() : null), due_on: $("f-due").value || null, owner_id: $("f-owner").value || null,
-    row_count: num($("f-rows").value), issue_count: num($("f-issues").value), file_name: $("f-file").value.trim() || null, notes: $("f-notes").value.trim() || null };
+    row_count: num($("f-rows").value), issue_count: num($("f-issues").value), file_name: $("f-file").value.trim() || null, notes: $("f-notes").value.trim() || null, list_url: $("f-link").value.trim() || null };
   if (!body.dealer) return $("f-dealer").focus();
   const btn = $("d-save"); btn.disabled = true;
   try {
@@ -371,7 +371,7 @@ function renderHubspot() {
     return el("tr", { class: "click", onclick: () => openDrawer(r) }, [
       el("td", { class: "dealer" }, [el("b", {}, tk), el("small", { text: "#" + r.hubspot_ticket_id })]), el("td", { text: r.dealer }),
       el("td", {}, a == null ? "–" : el("span", { class: a > 7 ? "late" : "", text: a === 0 ? "Today" : a + (a === 1 ? " day" : " days") })),
-      el("td", { text: r.hubspot_owner || "–" }), el("td", {}, el("span", { class: "pill st-" + r.status, text: stLabel(r.status) })),
+      el("td", { text: r.hubspot_owner || "–" }), el("td", {}, r.list_url ? el("a", { class: "listlink", href: r.list_url, target: "_blank", rel: "noopener", text: "Open list ↗", onclick: e => e.stopPropagation() }) : el("span", { class: "faint", text: "No link yet" })), el("td", {}, el("span", { class: "pill st-" + r.status, text: stLabel(r.status) })),
       el("td", { text: fmtDate(r.received_on) }), el("td", { text: fmtDate(r.uploaded_on) })]);
   }));
   const E = $("hs-empty"); E.hidden = list.length > 0;
