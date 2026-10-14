@@ -33,6 +33,13 @@ const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { ret
 const hue = id => { let h = 0; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) % 360; return `hsl(${h} 45% 42%)`; };
 const isLate = r => r.status === "Expected" && r.due_on && r.due_on < today();
 const turn = r => r.received_on && r.uploaded_on ? days(r.received_on, r.uploaded_on) : null;
+/* HubSpot ticket links. Portal (Hub) ID comes from config.js, or is learned from a pasted ticket link. */
+const portalId = () => String(C.HUBSPOT_PORTAL_ID || "").trim() || store.get("du-portal") || "";
+const parseTicket = v => { v = String(v || "").trim(); if (!v) return { id: null };
+  const u = v.match(/hubspot\.com\/[a-z-]+\/(\d+)\/(?:.*\/)?(?:ticket|record\/0-5)\/(\d+)/i); if (u) return { id: u[2], portal: u[1] };
+  const n = v.match(/^#?(\d+)$/); return n ? { id: n[1] } : { bad: true }; };
+const ticketHref = r => r && r.hubspot_ticket_id && portalId() ? `https://${C.HUBSPOT_HOST || "app.hubspot.com"}/contacts/${portalId()}/record/0-5/${r.hubspot_ticket_id}` : null;
+const ticketLink = (r, text, cls) => { const h = ticketHref(r); return h ? el("a", { class: cls, href: h, target: "_blank", rel: "noopener", title: "Open ticket in HubSpot", text, onclick: e => e.stopPropagation() }) : el("span", { text }); };
 const refDate = r => r.received_on || (r.hubspot_created_at || r.created_at || "").slice(0, 10);
 
 /* ---------- state ---------- */
@@ -206,6 +213,7 @@ function renderUploads() {
   const avg = turns.length ? Math.round(turns.reduce((a, b) => a + b, 0) / turns.length * 10) / 10 : null;
   $("kpis").replaceChildren(
     kpi("", "Open files", R.filter(r => r.status !== "Loaded").length, "Not uploaded yet", () => setStatus("open")),
+    kpi(late.length ? "bad" : "", "Waiting on dealer", exp.length, late.length ? late.length + " past expected date" : "None late", () => setStatus("Expected")),
     kpi(iss.length ? "bad" : "", "Sent back", iss.length, fmt(iss.reduce((a, r) => a + (+r.issue_count || 0), 0)) + " rows to fix", () => setStatus("Issues")),
     kpi(rdy.length ? "warn" : "", "Ready to upload", rdy.length, "Checked and clean", () => setStatus("Ready")),
     kpi("good", "Uploaded this month", upM.length, fmt(upM.reduce((a, r) => a + (+r.row_count || 0), 0)) + " customer rows", () => setStatus("Loaded")),
@@ -220,7 +228,7 @@ function renderUploads() {
   const q = S.q.toLowerCase(), lim = { month: t.slice(0, 7) + "-01", 30: addDays(t, -30), 90: addDays(t, -90) }[S.period];
   let list = R.filter(r => (S.status === "all" || (S.status === "open" ? r.status !== "Loaded" : r.status === S.status))
     && (!S.type || r.list_type === S.type) && (!lim || refDate(r) >= lim || r.status !== "Loaded")
-    && (!q || [r.dealer, r.file_name, r.notes, r.hubspot_ticket_name].join(" ").toLowerCase().includes(q)));
+    && (!q || [r.dealer, r.file_name, r.notes, r.hubspot_ticket_name, r.hubspot_ticket_id].join(" ").toLowerCase().includes(q)));
   const { key, dir } = S.sort, order = Object.fromEntries(STATUSES.map(([s], i) => [s, i]));
   const val = r => key === "turn" ? turn(r) : key === "status" ? order[r.status] : key === "received_on" ? refDate(r) : r[key];
   list.sort((a, b) => { const x = val(a), y = val(b); if (x == null && y == null) return 0; if (x == null) return 1; if (y == null) return -1; return (x < y ? -1 : x > y ? 1 : 0) * (dir === "asc" ? 1 : -1); });
@@ -233,7 +241,7 @@ function renderUploads() {
     up.addEventListener("change", () => quickUploaded(r, up.value));
     const tn = turn(r);
     return el("tr", { class: "click", onclick: () => openDrawer(r) }, [
-      el("td", { class: "dealer" }, [el("b", {}, [r.dealer, r.source === "hubspot" ? el("span", { class: "src", text: "HubSpot" }) : null]), r.file_name ? el("small", { text: r.file_name }) : null, r.list_url ? el("a", { class: "listlink", href: r.list_url, target: "_blank", rel: "noopener", text: "Open list ↗", onclick: e => e.stopPropagation() }) : null]),
+      el("td", { class: "dealer" }, [el("b", {}, [r.dealer, r.source === "hubspot" ? (ticketHref(r) ? el("a", { class: "src", href: ticketHref(r), target: "_blank", rel: "noopener", title: "Open ticket in HubSpot", text: "HubSpot ↗", onclick: e => e.stopPropagation() }) : el("span", { class: "src", text: "HubSpot" })) : null]), r.file_name ? el("small", { text: r.file_name }) : null, r.list_url ? el("a", { class: "listlink", href: r.list_url, target: "_blank", rel: "noopener", text: "Open list ↗", onclick: e => e.stopPropagation() }) : null, ticketHref(r) ? ticketLink(r, "View ticket #" + r.hubspot_ticket_id + " ↗", "listlink tixlink") : null]),
       el("td", {}, r.list_type || el("span", { class: "late", text: "Set list type" })),
       el("td", {}, st),
       el("td", {}, r.received_on ? fmtDate(r.received_on) : (r.due_on ? el("span", {}, [el("span", { class: "faint", text: "due " + fmtDate(r.due_on) + " " }), isLate(r) ? el("span", { class: "late", text: "Late" }) : null]) : el("span", { class: "faint", text: "–" }))),
@@ -305,10 +313,11 @@ async function openDrawer(r, prefill) {
   $("f-received").value = d.received_on || ""; $("f-uploaded").value = d.uploaded_on || ""; $("f-due").value = d.due_on || "";
   $("f-owner").value = d.owner_id && S.profiles[d.owner_id] ? d.owner_id : ""; $("f-rows").value = d.row_count ?? ""; $("f-issues").value = d.issue_count ?? "";
   $("f-file").value = d.file_name || ""; $("f-notes").value = d.notes || ""; $("f-link").value = d.list_url || "";
+  const ft = $("f-ticket"); ft.value = d.hubspot_ticket_id ? (ticketHref(d) || d.hubspot_ticket_id) : ""; ft.disabled = !!(r && r.source === "hubspot"); ft.title = ft.disabled ? "Set by the HubSpot sync" : "";
   const del = $("d-del"); del.hidden = !r; del.classList.remove("armed"); del.textContent = "Delete";
   const hs = $("d-hs"); hs.hidden = !(r && r.hubspot_ticket_id);
   if (r && r.hubspot_ticket_id) {
-    const link = C.HUBSPOT_PORTAL_ID ? el("a", { href: `https://app.hubspot.com/contacts/${C.HUBSPOT_PORTAL_ID}/ticket/${r.hubspot_ticket_id}`, target: "_blank", rel: "noopener", text: r.hubspot_ticket_name || "#" + r.hubspot_ticket_id }) : (r.hubspot_ticket_name || "#" + r.hubspot_ticket_id);
+    const link = ticketLink(r, r.hubspot_ticket_name || "#" + r.hubspot_ticket_id);
     hs.replaceChildren(el("b", { text: "HubSpot ticket: " }), link, el("br"), el("span", { class: "muted", text: `${r.hubspot_in_stage === false ? "Moved out of Upload Needed" : "In Upload Needed"} · opened ${fmtDate(r.hubspot_created_at)}${r.hubspot_owner ? " · " + r.hubspot_owner : ""}` }));
   }
   $("d-activity").replaceChildren();
@@ -336,6 +345,10 @@ $("dform").addEventListener("submit", async e => {
     uploaded_on: $("f-uploaded").value || (status === "Loaded" ? today() : null), due_on: $("f-due").value || null, owner_id: $("f-owner").value || null,
     row_count: num($("f-rows").value), issue_count: num($("f-issues").value), file_name: $("f-file").value.trim() || null, notes: $("f-notes").value.trim() || null, list_url: $("f-link").value.trim() || null };
   if (!body.dealer) return $("f-dealer").focus();
+  if (!$("f-ticket").disabled) { const t = parseTicket($("f-ticket").value);
+    if (t.bad) { toast("HubSpot ticket should be a ticket link or a ticket number."); return $("f-ticket").focus(); }
+    if (t.portal && !C.HUBSPOT_PORTAL_ID) store.set("du-portal", t.portal);
+    body.hubspot_ticket_id = t.id; }
   const btn = $("d-save"); btn.disabled = true;
   try {
     if (S.editing) { await api.update(S.editing.id, body); toast("Saved"); }
@@ -353,14 +366,6 @@ $("d-del").addEventListener("click", async () => {
 /* =========================================================
    HUBSPOT PAGE
    ========================================================= */
-function typeSelect(r) {
-  const known = TYPE_NAMES.includes(r.list_type);
-  const sel = el("select", { class: "typesel" + (r.list_type ? "" : " missing"), "aria-label": "List type for " + r.dealer, onclick: e => e.stopPropagation() },
-    [el("option", { value: "", text: "Set list type" }), ...(r.list_type && !known ? [el("option", { value: r.list_type, text: r.list_type })] : []), ...TYPE_NAMES.map(n => el("option", { value: n, text: n }))]);
-  sel.value = r.list_type || "";
-  sel.addEventListener("change", async () => { try { await api.update(r.id, { list_type: sel.value || null }); toast(`${r.dealer}: ${sel.value || "list type cleared"}`); render(); } catch (e) { toast("Couldn't save: " + e.message); render(); } });
-  return sel;
-}
 function renderHubspot() {
   const list = S.uploads.filter(r => r.source === "hubspot" && r.hubspot_in_stage !== false).sort((a, b) => (a.hubspot_created_at || "") < (b.hubspot_created_at || "") ? -1 : 1);
   const t = today(), age = r => r.hubspot_created_at ? days(r.hubspot_created_at.slice(0, 10), t) : null;
@@ -374,10 +379,9 @@ function renderHubspot() {
   info.className = "sync" + (s && s.error ? " err" : "");
   info.textContent = !s ? "Not synced yet" : s.error ? "Last sync failed: " + s.error.slice(0, 90) : `Synced ${ago(s.finished_at || s.started_at)} · ${s.found ?? 0} tickets${s.created ? ", " + s.created + " new" : ""}`;
   $("hs-rows").replaceChildren(...list.map(r => {
-    const a = age(r), tk = C.HUBSPOT_PORTAL_ID ? el("a", { href: `https://app.hubspot.com/contacts/${C.HUBSPOT_PORTAL_ID}/ticket/${r.hubspot_ticket_id}`, target: "_blank", rel: "noopener", onclick: e => e.stopPropagation(), text: r.hubspot_ticket_name || "#" + r.hubspot_ticket_id }) : el("span", { text: r.hubspot_ticket_name || "#" + r.hubspot_ticket_id });
+    const a = age(r), tk = ticketLink(r, r.hubspot_ticket_name || "#" + r.hubspot_ticket_id);
     return el("tr", { class: "click", onclick: () => openDrawer(r) }, [
       el("td", { class: "dealer" }, [el("b", {}, tk), el("small", { text: "#" + r.hubspot_ticket_id })]), el("td", { text: r.dealer }),
-      el("td", {}, typeSelect(r)),
       el("td", {}, a == null ? "–" : el("span", { class: a > 7 ? "late" : "", text: a === 0 ? "Today" : a + (a === 1 ? " day" : " days") })),
       el("td", { text: r.hubspot_owner || "–" }), el("td", {}, r.list_url ? el("a", { class: "listlink", href: r.list_url, target: "_blank", rel: "noopener", text: "Open list ↗", onclick: e => e.stopPropagation() }) : el("span", { class: "faint", text: "No link yet" })), el("td", {}, el("span", { class: "pill st-" + r.status, text: stLabel(r.status) })),
       el("td", { text: fmtDate(r.received_on) }), el("td", { text: fmtDate(r.uploaded_on) })]);

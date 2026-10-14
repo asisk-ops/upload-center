@@ -66,7 +66,7 @@
         <div class="tbar">
           <div class="seg" id="seg" role="tablist" aria-label="Status filter"></div>
           <div class="tbar-r">
-            <input id="q" type="search" placeholder="Search dealer, file, note" aria-label="Search">
+            <input id="q" type="search" placeholder="Search dealer, ticket #, file, note" aria-label="Search">
             <select id="ft" aria-label="List type"><option value="">All list types</option></select>
             <select id="fp" aria-label="Period"><option value="all">All time</option><option value="month">This month</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option></select>
           </div>
@@ -92,7 +92,7 @@
       <div class="kpis" id="hs-kpis"></div>
       <div class="card flush">
         <div class="table-wrap"><table class="tbl">
-          <thead><tr><th>Ticket</th><th>Dealer</th><th>List type</th><th>In stage</th><th>HubSpot owner</th><th>List</th><th>Tracker status</th><th>Came in</th><th>Uploaded</th></tr></thead>
+          <thead><tr><th>Ticket</th><th>Dealer</th><th>In stage</th><th>HubSpot owner</th><th>List</th><th>Tracker status</th><th>Came in</th><th>Uploaded</th></tr></thead>
           <tbody id="hs-rows"></tbody>
         </table></div>
         <div class="empty" id="hs-empty" hidden></div>
@@ -178,6 +178,7 @@
     </div>
     <label class="fld"><span>File name</span><input id="f-file" placeholder="DealerName_ListType_MMDDYYYY.csv"></label>
     <label class="fld"><span>List link</span><input id="f-link" type="url" placeholder="Filled in from the HubSpot ticket's notes"></label>
+    <label class="fld"><span>HubSpot ticket</span><input id="f-ticket" inputmode="url" placeholder="Paste the ticket link, or type the ticket number"></label>
     <label class="fld"><span>Notes</span><textarea id="f-notes" rows="3"></textarea></label>
     <div class="dactions">
       <button type="button" class="btn danger" id="d-del" hidden>Delete</button>

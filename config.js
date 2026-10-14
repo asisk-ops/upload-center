@@ -6,5 +6,6 @@ window.APP_CONFIG = {
   SUPABASE_URL: "https://rfguhnwzqdsmgzbvaamk.supabase.co",
   SUPABASE_ANON_KEY: "sb_publishable_QTKSIbseGNemZsJhH3IbsA_7WtfxcXn",
   TEAM_DOMAIN: "callsourceauto.com",
-  HUBSPOT_PORTAL_ID: "" // optional: your HubSpot account ID, so ticket names link straight to HubSpot
+  HUBSPOT_PORTAL_ID: "243460297", // your HubSpot account ID, so ticket names link straight to HubSpot
+  HUBSPOT_HOST: "app-na2.hubspot.com" // HubSpot app address for your account
 };

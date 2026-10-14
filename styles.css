@@ -204,6 +204,5 @@ details summary{cursor:pointer;font-weight:700;color:var(--blue);padding:14px 18
 .listlink{display:inline-block;margin-top:2px;font-size:12px;font-weight:700;color:var(--blue);text-decoration:none}
 .listlink:hover{text-decoration:underline}
 .dealer .listlink{display:block}
-td select.typesel{width:auto;max-width:230px;padding:4px 8px;font-size:12.5px;font-weight:600}
-td select.typesel.missing{color:var(--red);border-color:var(--red)}
-#hs-rows .faint,#hs-rows .listlink{white-space:nowrap}
+.listlink.tixlink{color:var(--hs)}
+a.src{text-decoration:none}a.src:hover{text-decoration:underline}
