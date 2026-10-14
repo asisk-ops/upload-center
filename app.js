@@ -345,6 +345,7 @@ $("dform").addEventListener("submit", async e => {
     uploaded_on: $("f-uploaded").value || (status === "Loaded" ? today() : null), due_on: $("f-due").value || null, owner_id: $("f-owner").value || null,
     row_count: num($("f-rows").value), issue_count: num($("f-issues").value), file_name: $("f-file").value.trim() || null, notes: $("f-notes").value.trim() || null, list_url: $("f-link").value.trim() || null };
   if (!body.dealer) return $("f-dealer").focus();
+  if (body.list_url && !body.received_on) { body.received_on = today(); if (body.status === "Expected") body.status = "Received"; }
   if (!$("f-ticket").disabled) { const t = parseTicket($("f-ticket").value);
     if (t.bad) { toast("HubSpot ticket should be a ticket link or a ticket number."); return $("f-ticket").focus(); }
     if (t.portal && !C.HUBSPOT_PORTAL_ID) store.set("du-portal", t.portal);
