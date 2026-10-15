@@ -115,17 +115,15 @@ function setMode(m, msg = "", ok = false) {
   $("row-name").hidden = m !== "signup"; $("row-pass").hidden = m === "reset";
   $("a-email").closest(".fld").hidden = m === "newpass";
   $("a-pass").autocomplete = m === "signin" ? "current-password" : "new-password";
-  $("to-signup").textContent = m === "signin" ? "Create an account" : "Back to sign in";
-  $("to-reset").hidden = m !== "signin";
   const box = $("auth-msg"); box.textContent = msg; box.classList.toggle("ok", ok);
 }
-$("to-signup").addEventListener("click", () => setMode(mode === "signin" ? "signup" : "signin"));
-$("to-reset").addEventListener("click", () => setMode("reset"));
+// Accounts are created by an admin in Supabase; there is no self sign-up or self reset here.
 $("authform").addEventListener("submit", async e => {
   e.preventDefault();
   const email = $("a-email").value.trim().toLowerCase(), pass = $("a-pass").value, btn = $("auth-go");
   if (mode !== "newpass" && !email.endsWith("@" + DOMAIN)) return setMode(mode, `Use your @${DOMAIN} email address.`);
   if ((mode === "signup" || mode === "newpass") && pass.length < 8) return setMode(mode, "Passwords need at least 8 characters.");
+  if (mode === "signup" || mode === "reset") return setMode("signin", "Ask your admin to create your account or reset your password.");
   btn.disabled = true;
   try {
     if (mode === "signin") { const { error } = await sb.auth.signInWithPassword({ email, password: pass }); if (error) throw error; }
