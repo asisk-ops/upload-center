@@ -101,10 +101,7 @@ function demoApi() {
     mk("Example Jeep", null, "Expected", null, null, { source: "hubspot", hubspot_ticket_id: "1002", hubspot_ticket_name: "Example Jeep – monthly upload", hubspot_owner: "Sam (demo)", hubspot_created_at: addDays(t, -1) + "T15:00:00Z", hubspot_in_stage: true, owner_id: "d3" }),
     mk("Example Acura", "Recalls", "Received", -1, null, { source: "hubspot", hubspot_ticket_id: "1003", hubspot_ticket_name: "Example Acura – recall list", hubspot_owner: "Alyssa (demo)", hubspot_created_at: addDays(t, -3) + "T15:00:00Z", hubspot_in_stage: true, row_count: 430 })];
   return {
-    async load() { S.incentives = [
-      { dealer: "Example Honda", active: "Free car wash and health inspection", at_risk: "$20 off any service", inactive: "$50 off any service", other: "Spend & Save\nSpend $100 - Save $10\nSpend $200 - Save $20", expiration: "12/31/2026", hubspot_company_id: "1", updated_at: new Date(Date.now() - 3 * 864e5).toISOString() },
-      { dealer: "Example Toyota", active: "$49.95 oil change", at_risk: "$39.95 oil change", inactive: "$19.95 oil change", other: "needs update, do not use", expiration: null, hubspot_company_id: null, updated_at: new Date(Date.now() - 864e5).toISOString() },
-      { dealer: "Example Ford", active: "NO OFFER", at_risk: "NO OFFER", inactive: "NO OFFER", other: null, expiration: null, hubspot_company_id: "3", updated_at: new Date(Date.now() - 9 * 864e5).toISOString() }];
+    async load() {
       S.uploads = rows; S.profiles = Object.fromEntries(people.map(([id, email, full_name]) => [id, { id, email, full_name }])); S.me = S.profiles.d1; S.sync = { started_at: new Date(Date.now() - 6 * 6e4).toISOString(), finished_at: new Date().toISOString(), found: 3, created: 0 }; },
     subscribe() {},
     async insert(b) { const r = { id: crypto.randomUUID(), created_at: new Date().toISOString(), source: "manual", ...b }; rows.unshift(r); (ev[r.id] = ev[r.id] || []).unshift({ action: "created", actor_id: "d1", created_at: r.created_at, detail: {} }); return r; },
@@ -161,6 +158,7 @@ async function enter(session) {
   }
   $("auth").hidden = true; $("app").hidden = false;
   try { await api.load(); } catch (e) { toast("Couldn't load uploads: " + (e.message || e)); }
+  if (!S.incentives.length) await loadIncentiveFile();
   if (LIVE && S.profiles[S.me.id]) S.me = S.profiles[S.me.id];
   renderMe(); fillOwners(); render();
   api.subscribe(render);
@@ -428,50 +426,85 @@ $("d-del").addEventListener("click", async () => {
 });
 
 /* =========================================================
-   INCENTIVES (from the Google Sheet, via the sync)
+   INCENTIVES — from Supabase (Google Sheet sync) when set up, otherwise from incentives.csv in this site
    ========================================================= */
 const nName = s => String(s || "").toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]/g, "");
 function incFor(dealer) { const n = nName(dealer); return n ? S.incentives.find(r => nName(r.dealer) === n) || S.incentives.find(r => { const m = nName(r.dealer); return m.length > 5 && (n.includes(m) || m.includes(n)); }) : null; }
-const NONE_RE = /^(no offer|none|n\/a|-|–)$/i;
-const hasOffer = v => v && !NONE_RE.test(v.trim());
+const NONE_RE = /^(no offer|none|n\/a|-|–|—)$/i;
+const hasOffer = v => !!(v && !NONE_RE.test(v.trim()));
+const tidy = v => v == null ? null : String(v).replace(/\r/g, "").replace(/ {5,}/g, "\n").replace(/\s+\/\/\s*/g, "\n").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim() || null;
 function incFlag(r) {
   const all = [r.active, r.at_risk, r.inactive, r.other, r.expiration].join(" ");
   if (/needs? update|do not use/i.test(all)) return ["err", "Needs update"];
-  if (![r.active, r.at_risk, r.inactive, r.other].some(hasOffer)) return ["warn", "No offer"];
+  if (![r.active, r.at_risk, r.inactive, r.other].some(hasOffer)) return ["muted", "No offer"];
   return null;
 }
-const INC_COLS = [["active", "Active", "0–6 mo"], ["at_risk", "At-risk", "7–12 mo"], ["inactive", "Inactive", "12+ mo"], ["other", "Other incentives", ""]];
+async function loadIncentiveFile() {
+  try {
+    const res = await fetch("incentives.csv?t=" + Date.now(), { cache: "no-store" });
+    if (!res.ok) return;
+    const rows = parseCSV(await res.text()), hi = rows.findIndex(r => r.some(c => nName(c) === "dealer"));
+    if (hi < 0) return;
+    const H = rows[hi].map(nName), ix = t => H.findIndex(t);
+    const C = { dealer: ix(h => h === "dealer"), active: ix(h => h.startsWith("active")), at_risk: ix(h => h.startsWith("atrisk")), inactive: ix(h => h.startsWith("inactive")), other: ix(h => h.startsWith("other")), expiration: ix(h => h.startsWith("expir")) };
+    const get = (r, i) => i < 0 ? null : tidy(r[i]);
+    S.incentives = rows.slice(hi + 1).map(r => ({ dealer: get(r, C.dealer), active: get(r, C.active), at_risk: get(r, C.at_risk), inactive: get(r, C.inactive), other: get(r, C.other), expiration: get(r, C.expiration) }))
+      .filter(r => r.dealer).sort((a, b) => a.dealer.localeCompare(b.dealer));
+    S.incSource = "file"; const lm = res.headers.get("last-modified"); S.incFileDate = lm ? new Date(lm) : null;
+  } catch (e) { /* no file */ }
+}
+const TIERS = [["active", "Active", "0–6 months", "t-active"], ["at_risk", "At-risk", "7–12 months", "t-risk"], ["inactive", "Inactive", "12+ months", "t-inactive"]];
+async function copyText(t, what) { try { await navigator.clipboard.writeText(t); toast(what + " copied"); } catch (e) { toast("Couldn't copy. Select the text instead."); } }
+function offerBlock(r, k, label, sub, cls) {
+  const v = r[k], ok = hasOffer(v), long = ok && (v.length > 260 || v.split("\n").length > 7);
+  const p = el("p", { class: long ? "clamp" : "", text: ok ? v : (v ? v.toUpperCase() === v ? "No offer" : v : "No offer") });
+  return el("div", { class: "tier " + cls + (ok ? "" : " none") }, [
+    el("div", { class: "tier-h" }, [el("b", { text: label }), sub ? el("small", { text: sub }) : null,
+      ok ? el("button", { type: "button", class: "copy", title: "Copy this offer", "aria-label": "Copy " + label + " offer for " + r.dealer, text: "Copy", onclick: e => { e.stopPropagation(); copyText(v, label + " offer"); } }) : null]),
+    p, long ? el("button", { type: "button", class: "more", text: "Show more", onclick: e => { const on = p.classList.toggle("clamp"); e.target.textContent = on ? "Show more" : "Show less"; } }) : null]);
+}
 function incBody(r) {
   return el("div", { class: "incbody" }, [
-    ...INC_COLS.map(([k, l, sub]) => el("div", { class: "inccol" + (hasOffer(r[k]) ? "" : " none") }, [el("h4", {}, [l, sub ? el("small", { text: " " + sub }) : null]), el("p", { text: r[k] || "—" })])),
+    el("div", { class: "tiers" }, TIERS.map(([k, l, s, c]) => offerBlock(r, k, l, s, c))),
+    hasOffer(r.other) || r.other ? offerBlock(r, "other", "Other incentives", "", "t-other") : null,
     r.expiration ? el("div", { class: "incexp" }, [el("b", { text: "Expires " }), r.expiration]) : null]);
 }
 function renderIncentives() {
-  const R = S.incentives, q = S.incQ.toLowerCase();
-  const counts = { all: R.length, flag: R.filter(r => incFlag(r) && incFlag(r)[0] === "err").length, none: R.filter(r => incFlag(r) && incFlag(r)[0] === "warn").length, nohs: R.filter(r => !r.hubspot_company_id).length };
-  $("inc-seg").replaceChildren(...[["all", "All dealers"], ["flag", "Needs update"], ["none", "No offer"], ["nohs", "Not in HubSpot"]].map(([v, l]) =>
-    el("button", { class: S.incFilter === v ? "on" : "", role: "tab", "aria-selected": S.incFilter === v ? "true" : "false", onclick: () => { S.incFilter = v; renderIncentives(); } }, [l, el("i", { text: counts[v] })])));
-  const list = R.filter(r => (S.incFilter === "all" || (S.incFilter === "nohs" ? !r.hubspot_company_id : incFlag(r) && incFlag(r)[0] === (S.incFilter === "flag" ? "err" : "warn")))
-    && (!q || [r.dealer, r.active, r.at_risk, r.inactive, r.other].join(" ").toLowerCase().includes(q)));
+  const R = S.incentives, q = S.incQ.toLowerCase(), fileMode = S.incSource === "file";
+  const flagged = R.filter(r => incFlag(r) && incFlag(r)[0] === "err"), none = R.filter(r => incFlag(r) && incFlag(r)[0] === "muted");
+  $("inc-kpis").replaceChildren(
+    kpi("", "Dealers", R.length, fileMode ? "In the incentive sheet" : "From the Google Sheet", () => { S.incFilter = "all"; renderIncentives(); }),
+    kpi("good", "With offers", R.length - flagged.length - none.length, "Ready for agents to use", () => { S.incFilter = "ok"; renderIncentives(); }),
+    kpi(flagged.length ? "bad" : "", "Needs update", flagged.length, "Marked “needs update” or “do not use”", () => { S.incFilter = "flag"; renderIncentives(); }),
+    kpi("", "No offer", none.length, "Nothing to offer right now", () => { S.incFilter = "none"; renderIncentives(); }));
+  const segs = [["all", "All", R.length], ["ok", "With offers", R.length - flagged.length - none.length], ["flag", "Needs update", flagged.length], ["none", "No offer", none.length]];
+  if (!fileMode) segs.push(["nohs", "Not in HubSpot", R.filter(r => !r.hubspot_company_id).length]);
+  $("inc-seg").replaceChildren(...segs.map(([v, l, n]) => el("button", { class: S.incFilter === v ? "on" : "", role: "tab", "aria-selected": S.incFilter === v ? "true" : "false", onclick: () => { S.incFilter = v; renderIncentives(); } }, [l, el("i", { text: n })])));
+  const match = r => { const f = incFlag(r); return S.incFilter === "all" || (S.incFilter === "ok" && !f) || (S.incFilter === "flag" && f && f[0] === "err") || (S.incFilter === "none" && f && f[0] === "muted") || (S.incFilter === "nohs" && !r.hubspot_company_id); };
+  const list = R.filter(r => match(r) && (!q || [r.dealer, r.active, r.at_risk, r.inactive, r.other].join(" ").toLowerCase().includes(q)));
   $("inc-list").replaceChildren(...list.map(r => {
     const f = incFlag(r), open = S.uploads.filter(u => u.status !== "Loaded" && nName(u.dealer) === nName(r.dealer)).length;
-    return el("article", { class: "inccard" }, [
-      el("header", {}, [el("h3", { text: r.dealer }), f ? el("span", { class: "tag " + f[0], text: f[1] }) : null,
-        r.hubspot_company_id ? (C.HUBSPOT_PORTAL_ID ? el("a", { class: "tag hs", href: `https://${C.HUBSPOT_HOST || "app.hubspot.com"}/contacts/${C.HUBSPOT_PORTAL_ID}/record/0-2/${r.hubspot_company_id}`, target: "_blank", rel: "noopener", text: "In HubSpot ↗" }) : el("span", { class: "tag hs", text: "In HubSpot" }))
-          : el("span", { class: "tag warn", text: "Not in HubSpot", title: "No HubSpot company has this exact name. Match the dealer name in the sheet to the company name in HubSpot." }),
-        open ? el("button", { class: "tag ok", text: open + " open upload" + (open === 1 ? "" : "s"), onclick: () => { go("uploads"); S.q = r.dealer; $("q").value = r.dealer; setStatus("open"); } }) : null,
-        el("span", { class: "faint", style: "margin-left:auto;font-size:12px", text: "Changed " + ago(r.updated_at) })]),
+    return el("article", { class: "inccard" + (f ? " is-" + f[0] : "") }, [
+      el("header", {}, [
+        el("div", { class: "inc-mono", text: r.dealer.replace(/[^A-Za-z ]/g, "").split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase(), "aria-hidden": "true" }),
+        el("h3", { text: r.dealer }),
+        f ? el("span", { class: "tag " + f[0], text: f[1] }) : null,
+        !fileMode && r.hubspot_company_id && C.HUBSPOT_PORTAL_ID ? el("a", { class: "tag hs", href: `https://${C.HUBSPOT_HOST || "app.hubspot.com"}/contacts/${C.HUBSPOT_PORTAL_ID}/record/0-2/${r.hubspot_company_id}`, target: "_blank", rel: "noopener", text: "HubSpot ↗" }) : null,
+        open ? el("button", { class: "tag ok", text: open + " open upload" + (open === 1 ? "" : "s"), onclick: () => { go("uploads"); S.q = r.dealer; $("q").value = r.dealer; setStatus("open"); } }) : null]),
       incBody(r)]);
   }));
   const E = $("inc-empty"); E.hidden = list.length > 0;
-  if (!list.length) E.replaceChildren(el("b", { text: R.length ? "No dealers match" : "No incentives yet" }), R.length ? "Try another filter." : "Once the Google Sheet is connected (see setup), the incentive offers appear here after the next sync.");
-  const s = S.sync; $("inc-info").textContent = R.length ? `${R.length} dealers · synced ${s ? ago(s.finished_at || s.started_at) : "–"}` : "";
+  if (!list.length) E.replaceChildren(el("b", { text: R.length ? "No dealers match" : "No incentives yet" }), R.length ? "Try another filter or search." : "Add incentives.csv to the site to show the incentive sheet here.");
+  const s = S.sync;
+  $("inc-info").textContent = fileMode ? (S.incFileDate ? "Sheet updated " + S.incFileDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "") : (R.length ? `Synced ${s ? ago(s.finished_at || s.started_at) : "–"}` : "");
+  $("inc-refresh").hidden = fileMode;
+  $("inc-sub").textContent = fileMode ? "Offers agents can use for each dealer, by how long since the customer's last visit. To update, download the Google Sheet as CSV and upload it to GitHub as incentives.csv." : "From the CX Pro incentive Google Sheet. Edit the sheet; changes show here and in HubSpot within 15 minutes.";
 }
 $("inc-q").addEventListener("input", e => { S.incQ = e.target.value; renderIncentives(); });
 $("inc-refresh").addEventListener("click", async () => {
   const b = $("inc-refresh"); b.disabled = true; b.textContent = "Refreshing…";
   try { const r = await api.sync(); if (r && r.ok === false) throw new Error(r.error); const i = r && r.incentives;
-    toast(i ? `Incentives updated: ${i.dealers} dealers, ${i.changed} changed, ${i.pushed} sent to HubSpot` : "Synced. The incentive sheet isn't connected yet."); if (LIVE) await api.load(); render(); }
+    toast(i ? `Incentives updated: ${i.dealers} dealers, ${i.changed} changed, ${i.pushed} sent to HubSpot` : "Synced."); if (LIVE) await api.load(); render(); }
   catch (e) { toast("Refresh failed: " + (e.message || e)); }
   finally { b.disabled = false; b.textContent = "Refresh now"; }
 });

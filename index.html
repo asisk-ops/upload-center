@@ -7,7 +7,7 @@
 <link rel="icon" href="logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@500;600;700;800&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@500&display=swap">
-<link rel="stylesheet" href="styles.css?v=20261016a">
+<link rel="stylesheet" href="styles.css?v=20261016b">
 </head>
 <body>
 
@@ -94,13 +94,15 @@
     <!-- HUBSPOT -->
     <section class="page" id="p-incentives" hidden>
       <header class="phead">
-        <div><h1>Dealer incentives</h1><p class="sub">From the CX Pro incentive Google Sheet. Edit the sheet; changes show here and in HubSpot within 15 minutes.</p></div>
-        <div class="actions"><span class="sync" id="inc-info"></span><button class="btn ghost" id="inc-refresh">Refresh now</button></div>
+        <div><h1>Dealer incentives</h1><p class="sub" id="inc-sub"></p></div>
+        <div class="actions"><span class="sync" id="inc-info"></span><button class="btn ghost" id="inc-refresh" hidden>Refresh now</button></div>
       </header>
+      <div class="kpis" id="inc-kpis"></div>
+      <div class="inc-legend" aria-hidden="true"><span class="t-active">Active · 0–6 mo</span><span class="t-risk">At-risk · 7–12 mo</span><span class="t-inactive">Inactive · 12+ mo</span><span class="t-other">Other incentives</span></div>
       <div class="card flush">
         <div class="tbar">
           <div class="seg" id="inc-seg" role="tablist" aria-label="Incentive filter"></div>
-          <div class="tbar-r"><input id="inc-q" type="search" placeholder="Search dealer or offer" aria-label="Search incentives"></div>
+          <div class="tbar-r"><input id="inc-q" type="search" placeholder="Search dealer or offer (e.g. oil change)" aria-label="Search incentives"></div>
         </div>
         <div class="incgrid" id="inc-list"></div>
         <div class="empty" id="inc-empty" hidden></div>
@@ -219,6 +221,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js?v=20261015b"></script>
 <script src="rules.js?v=20261015b"></script>
-<script src="app.js?v=20261016a"></script>
+<script src="app.js?v=20261016b"></script>
 </body>
 </html>
