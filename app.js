@@ -6,7 +6,7 @@ const DOMAIN = (C.TEAM_DOMAIN || "callsourceauto.com").toLowerCase();
 const LIVE = !!(C.SUPABASE_URL && !/YOUR-PROJECT/.test(C.SUPABASE_URL) && C.SUPABASE_ANON_KEY && !/YOUR-/.test(C.SUPABASE_ANON_KEY) && window.supabase);
 const sb = LIVE ? window.supabase.createClient(C.SUPABASE_URL, C.SUPABASE_ANON_KEY) : null;
 
-const STATUSES = [["Expected","Expected"],["Received","Received"],["Issues","Issues – sent back"],["Ready","Ready to load"],["Loaded","Uploaded"]];
+const STATUSES = [["Expected","Expected"],["Received","Received"],["Issues","Issues – sent back"],["Ready","Ready to load"],["OnHold","On hold"],["Loaded","Uploaded"]];
 const stLabel = s => (STATUSES.find(x => x[0] === s) || [s, s])[1];
 
 /* ---------- helpers ---------- */
@@ -207,15 +207,15 @@ function setStatus(st) { S.status = st; store.set("du-status", st); renderUpload
 
 function renderUploads() {
   const R = S.uploads, t = today(), month = t.slice(0, 7);
-  const exp = R.filter(r => r.status === "Expected"), late = exp.filter(isLate), iss = R.filter(r => r.status === "Issues"), rdy = R.filter(r => r.status === "Ready");
+  const exp = R.filter(r => r.status === "Expected"), late = exp.filter(isLate), iss = R.filter(r => r.status === "Issues"), rdy = R.filter(r => r.status === "Ready"), hold = R.filter(r => r.status === "OnHold");
   const upM = R.filter(r => r.status === "Loaded" && (r.uploaded_on || "").slice(0, 7) === month);
   const turns = R.filter(r => r.uploaded_on && r.uploaded_on >= addDays(t, -30)).map(turn).filter(x => x != null && x >= 0);
   const avg = turns.length ? Math.round(turns.reduce((a, b) => a + b, 0) / turns.length * 10) / 10 : null;
   $("kpis").replaceChildren(
     kpi("", "Open files", R.filter(r => r.status !== "Loaded").length, "Not uploaded yet", () => setStatus("open")),
-    kpi(late.length ? "bad" : "", "Waiting on dealer", exp.length, late.length ? late.length + " past expected date" : "None late", () => setStatus("Expected")),
     kpi(iss.length ? "bad" : "", "Sent back", iss.length, fmt(iss.reduce((a, r) => a + (+r.issue_count || 0), 0)) + " rows to fix", () => setStatus("Issues")),
     kpi(rdy.length ? "warn" : "", "Ready to upload", rdy.length, "Checked and clean", () => setStatus("Ready")),
+    kpi(hold.length ? "hold" : "", "On hold", hold.length, "Paused for now", () => setStatus("OnHold")),
     kpi("good", "Uploaded this month", upM.length, fmt(upM.reduce((a, r) => a + (+r.row_count || 0), 0)) + " customer rows", () => setStatus("Loaded")),
     kpi("", "Avg turnaround", avg == null ? "–" : avg, "Came in → uploaded, last 30 days", null, avg == null ? "" : avg === 1 ? "day" : "days"));
   renderWeekly(); renderByType();

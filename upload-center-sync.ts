@@ -9,6 +9,9 @@
 //   HUBSPOT_PIPELINE  optional  pipeline name or id; blank = search every ticket pipeline
 //   HUBSPOT_LIST_TYPE_PROPERTY  optional  internal name of the ticket "list type" property, default "list_type"
 // List links are taken from the ticket's notes: the newest note that contains a link.
+// "Came in" (received_on) is filled with the date the first list link was posted, and an
+// Expected ticket moves to Received at that point.
+//   TEAM_TIMEZONE     optional  timezone for that date, default "America/Chicago"
 // SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided by Supabase automatically.
 
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
@@ -40,13 +43,14 @@ function guessType(text: string): string | null {
   return null;
 }
 
-async function hs(path: string, token: string, body?: unknown) {
+async function hs(path: string, token: string, body?: unknown, tries = 0): Promise<any> {
   const res = await fetch(HS + path, {
     method: body ? "POST" : "GET",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: body ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(15000),  // give up on a HubSpot call after 15 seconds
   });
-  if (res.status === 429) { await new Promise((r) => setTimeout(r, 1200)); return hs(path, token, body); }
+  if (res.status === 429 && tries < 3) { await new Promise((r) => setTimeout(r, 1500)); return hs(path, token, body, tries + 1); }
   if (!res.ok) throw new Error(`HubSpot ${path} → ${res.status}: ${(await res.text()).slice(0, 300)}`);
   return res.json();
 }
@@ -136,6 +140,7 @@ Deno.serve(async (req) => {
       return m ? m[0].replace(/[).,;]+$/, "") : null;
     };
     const noteLink: Record<string, string> = {};
+    const noteFirst: Record<string, string> = {}; // ticket id → timestamp of the earliest note with a link
     try {
       const noteOf: Record<string, string[]> = {};
       for (const part of chunk(tickets.map((t) => ({ id: t.id })), 100)) {
@@ -147,15 +152,23 @@ Deno.serve(async (req) => {
       const body: Record<string, { url: string | null; ts: string }> = {};
       for (const part of chunk(allNotes.map((id) => ({ id })), 100)) {
         if (!part.length) continue;
-        const res = await hs("/crm/v3/objects/notes/batch/read", token, { inputs: part, properties: ["hs_note_body", "hs_timestamp"] });
-        for (const n of res.results ?? []) body[n.id] = { url: firstUrl(n.properties?.hs_note_body), ts: n.properties?.hs_timestamp || "" };
+        const res = await hs("/crm/v3/objects/notes/batch/read", token, { inputs: part, properties: ["hs_note_body", "hs_timestamp", "hs_createdate"] });
+        for (const n of res.results ?? []) body[n.id] = { url: firstUrl(n.properties?.hs_note_body), ts: n.properties?.hs_timestamp || n.properties?.hs_createdate || n.createdAt || "" };
       }
       for (const [tid, ids] of Object.entries(noteOf)) {
         const best = ids.map((id) => body[id]).filter((b) => b && b.url).sort((a, b) => (a.ts < b.ts ? 1 : -1))[0];
         if (best) noteLink[tid] = best.url!;
+        const first = ids.map((id) => body[id]).filter((b) => b && b.url && b.ts).sort((a, b) => (a.ts < b.ts ? -1 : 1))[0];
+        if (first) noteFirst[tid] = first.ts;
       }
     } catch (_) { notices.push("Couldn't read ticket notes for list links"); }
     const linkOf = (t: any) => noteLink[String(t.id)] ?? null;
+    const TZ = (Deno.env.get("TEAM_TIMEZONE") || "America/Chicago").trim();
+    const cameIn = (t: any): string | null => {  // YYYY-MM-DD the list link first showed up
+      const ts = noteFirst[String(t.id)]; if (!ts) return null;
+      const d = new Date(/^\d+$/.test(ts) ? Number(ts) : ts); if (isNaN(+d)) return null;
+      return d.toLocaleDateString("en-CA", { timeZone: TZ });
+    };
 
     // 4. Ticket owners → names, and team members by email.
     const owners: Record<string, { name: string; email: string }> = {};
@@ -167,7 +180,7 @@ Deno.serve(async (req) => {
     const profileByEmail = Object.fromEntries((profiles ?? []).map((p) => [p.email.toLowerCase(), p.id]));
 
     // 5. Insert tickets the tracker doesn't have yet.
-    const { data: existing } = await db.from("du_uploads").select("id,hubspot_ticket_id,hubspot_in_stage,list_type,list_url").not("hubspot_ticket_id", "is", null);
+    const { data: existing } = await db.from("du_uploads").select("id,hubspot_ticket_id,hubspot_in_stage,list_type,list_url,received_on,status").not("hubspot_ticket_id", "is", null);
     const known = new Set((existing ?? []).map((e) => e.hubspot_ticket_id));
     const inStage = new Set(tickets.map((t) => String(t.id)));
     const fresh = tickets.filter((t) => !known.has(String(t.id))).map((t) => {
@@ -177,7 +190,8 @@ Deno.serve(async (req) => {
         dealer: companyName[companyOf[t.id]] || subject,
         list_type: listTypeOf(t.properties?.[ltProp]) ?? guessType(t.properties?.content) ?? guessType(subject),
         list_url: linkOf(t),
-        status: "Expected",
+        received_on: cameIn(t),
+        status: cameIn(t) ? "Received" : "Expected",
         source: "hubspot",
         notes: `HubSpot ticket #${t.id}: ${subject}`,
         hubspot_ticket_id: String(t.id),
@@ -201,7 +215,7 @@ Deno.serve(async (req) => {
 
     // 7. Fill in list type (when blank) and list link (when HubSpot has a newer one) on tracked tickets.
     const byId = Object.fromEntries(tickets.map((t) => [String(t.id), t]));
-    let typed = 0;
+    let typed = 0, dated = 0;
     for (const e of existing ?? []) {
       const t = byId[e.hubspot_ticket_id];
       if (!t) continue;
@@ -210,11 +224,17 @@ Deno.serve(async (req) => {
       if (lt && !e.list_type) { patch.list_type = lt; typed++; }
       const url = linkOf(t);
       if (url && url !== e.list_url) patch.list_url = url;
-      if (Object.keys(patch).length) await db.from("du_uploads").update(patch).eq("id", e.id);
+      const came = cameIn(t);
+      if (came && !e.received_on) { patch.received_on = came; if (e.status === "Expected") patch.status = "Received"; }
+      if (Object.keys(patch).length) {
+        const { error: upErr } = await db.from("du_uploads").update(patch).eq("id", e.id);
+        if (upErr) notices.push(`Couldn't update ticket ${e.hubspot_ticket_id}: ${upErr.message}`);
+        else if (patch.received_on) dated++;
+      }
     }
 
     await finish({ found: tickets.length, created: fresh.length, error: notices.length ? notices.join("; ") : null });
-    return json({ ok: true, found: tickets.length, created: fresh.length, typed, notices });
+    return json({ ok: true, found: tickets.length, created: fresh.length, typed, dated, notices });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     await finish({ error: message });
