@@ -219,3 +219,25 @@ details summary{cursor:pointer;font-weight:700;color:var(--blue);padding:14px 18
 .dealer .listlink{display:block}
 .listlink.tixlink{color:var(--hs)}
 a.src{text-decoration:none}a.src:hover{text-decoration:underline}
+
+/* incentives */
+.incgrid{display:flex;flex-direction:column}
+.inccard{padding:14px 16px;border-bottom:1px solid var(--line)}
+.inccard:last-child{border-bottom:0}
+.inccard header{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.inccard h3{font:700 16px var(--display);color:var(--navy-ink);margin:0 4px 0 0}
+.incbody{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+@media (max-width:980px){.incbody{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:560px){.incbody{grid-template-columns:1fr}}
+.inccol{background:var(--track);border-radius:8px;padding:9px 11px;min-width:0}
+.inccol h4{font:700 11px var(--body);letter-spacing:.07em;text-transform:uppercase;color:var(--blue);margin:0 0 4px}
+.inccol h4 small{font-weight:600;letter-spacing:0;text-transform:none;color:var(--faint)}
+.inccol p{margin:0;font-size:13px;white-space:pre-line;overflow-wrap:anywhere}
+.inccol.none p{color:var(--faint);font-style:italic}
+.incexp{grid-column:1/-1;font-size:12.5px;color:var(--muted)}
+.tag.hs{background:var(--hs-bg);color:var(--hs);text-decoration:none}
+.tag.ok{background:var(--good-bg);color:var(--green);border:0;cursor:pointer;font:700 10.5px var(--body);letter-spacing:.05em;text-transform:uppercase}
+.incnote{background:var(--track);border-radius:8px;padding:10px 12px;font-size:13px}
+.incnote summary{cursor:pointer;font-weight:700;color:var(--navy-ink);display:flex;gap:8px;align-items:center}
+.incnote .incbody{grid-template-columns:1fr 1fr;margin-top:10px}
+.incnote .inccol{background:var(--card)}

@@ -7,7 +7,7 @@
 <link rel="icon" href="logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@500;600;700;800&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@500&display=swap">
-<link rel="stylesheet" href="styles.css?v=20261015b">
+<link rel="stylesheet" href="styles.css?v=20261016a">
 </head>
 <body>
 
@@ -36,6 +36,7 @@
     <nav class="nav" id="nav">
       <button data-page="uploads" class="active"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 4h14M3 10h14M3 16h9"/></svg>Uploads<em id="n-open"></em></button>
       <button data-page="hubspot"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="3"/><path d="M10 2v5M10 13v5M2 10h5M13 10h5"/></svg>HubSpot queue<em id="n-hs"></em></button>
+      <button data-page="incentives"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 8h14v9H3zM2 5h16v3H2zM10 5v12M10 5c-1-3-5-3-5 0M10 5c1-3 5-3 5 0"/></svg>Incentives</button>
       <button data-page="checker"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10l4 4 8-9"/></svg>File checker</button>
       <button data-page="template"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 2h7l4 4v12H5zM12 2v4h4"/></svg>Template</button>
     </nav>
@@ -91,6 +92,21 @@
     </section>
 
     <!-- HUBSPOT -->
+    <section class="page" id="p-incentives" hidden>
+      <header class="phead">
+        <div><h1>Dealer incentives</h1><p class="sub">From the CX Pro incentive Google Sheet. Edit the sheet; changes show here and in HubSpot within 15 minutes.</p></div>
+        <div class="actions"><span class="sync" id="inc-info"></span><button class="btn ghost" id="inc-refresh">Refresh now</button></div>
+      </header>
+      <div class="card flush">
+        <div class="tbar">
+          <div class="seg" id="inc-seg" role="tablist" aria-label="Incentive filter"></div>
+          <div class="tbar-r"><input id="inc-q" type="search" placeholder="Search dealer or offer" aria-label="Search incentives"></div>
+        </div>
+        <div class="incgrid" id="inc-list"></div>
+        <div class="empty" id="inc-empty" hidden></div>
+      </div>
+    </section>
+
     <section class="page" id="p-hubspot" hidden>
       <header class="phead">
         <div><h1>HubSpot queue</h1><p class="sub">Tickets in the <b>Upload Needed</b> stage. New tickets are added to Uploads automatically every 15 minutes.</p></div>
@@ -166,6 +182,7 @@
   <header class="dhead"><h2 id="d-title">Log upload</h2><button class="iconbtn" id="d-close" aria-label="Close">×</button></header>
   <form id="dform" class="dbody" autocomplete="off">
     <div class="hsnote" id="d-hs" hidden></div>
+    <details class="incnote" id="d-inc" hidden></details>
     <label class="fld"><span>Dealer</span><input id="f-dealer" required list="dealers"></label>
     <div class="two">
       <label class="fld"><span>List type</span><select id="f-type"><option value="">Choose…</option></select></label>
@@ -202,6 +219,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js?v=20261015b"></script>
 <script src="rules.js?v=20261015b"></script>
-<script src="app.js?v=20261015c"></script>
+<script src="app.js?v=20261016a"></script>
 </body>
 </html>

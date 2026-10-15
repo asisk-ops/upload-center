@@ -27,7 +27,7 @@ const today = () => iso(new Date());
 const addDays = (s, n) => { const d = new Date(s + "T12:00:00"); d.setDate(d.getDate() + n); return iso(d); };
 const days = (a, b) => Math.round((new Date(b + "T12:00:00") - new Date(a + "T12:00:00")) / 864e5);
 const fmtDate = s => { if (!s) return "–"; const d = new Date(s.slice(0, 10) + "T12:00:00"); return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: d.getFullYear() === new Date().getFullYear() ? undefined : "numeric" }); };
-const ago = ts => { const m = Math.round((Date.now() - new Date(ts)) / 6e4); if (m < 1) return "just now"; if (m < 60) return m + " min ago"; const h = Math.round(m / 60); if (h < 24) return h + " hr ago"; return Math.round(h / 24) + " days ago"; };
+const ago = ts => { const m = Math.round((Date.now() - new Date(ts)) / 6e4); if (m < 1) return "just now"; if (m < 60) return m + " min ago"; const h = Math.round(m / 60); if (h < 24) return h + " hr ago"; const dd = Math.round(h / 24); return dd === 1 ? "yesterday" : dd + " days ago"; };
 function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => t.hidden = true, 2800); }
 const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
 const hue = id => { let h = 0; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) % 360; return `hsl(${h} 45% 42%)`; };
@@ -43,7 +43,7 @@ const ticketLink = (r, text, cls) => { const h = ticketHref(r); return h ? el("a
 const refDate = r => r.received_on || (r.hubspot_created_at || r.created_at || "").slice(0, 10);
 
 /* ---------- state ---------- */
-const S = { range: (() => { try { return JSON.parse(store.get("du-range")) || { p: "30" }; } catch (e) { return { p: "30" }; } })(), upFilter: null, uploads: [], profiles: {}, me: null, sync: null, page: store.get("du-page") || "uploads",
+const S = { range: (() => { try { return JSON.parse(store.get("du-range")) || { p: "30" }; } catch (e) { return { p: "30" }; } })(), upFilter: null, incentives: [], incFilter: "all", incQ: "", uploads: [], profiles: {}, me: null, sync: null, page: store.get("du-page") || "uploads",
   status: store.get("du-status") || "open", type: "", period: store.get("du-period") || "all", q: "",
   sort: { key: "received_on", dir: "desc" }, editing: null };
 
@@ -58,6 +58,8 @@ const api = LIVE ? {
       sb.from("du_sync_runs").select("*").order("started_at", { ascending: false }).limit(1)]);
     if (u.error) throw u.error;
     S.uploads = u.data; S.profiles = Object.fromEntries((p.data || []).map(x => [x.id, x])); S.sync = (s.data || [])[0] || null;
+    const inc = await sb.from("du_incentives").select("*").order("dealer");  // table may not exist yet
+    S.incentives = inc.error ? [] : inc.data;
   },
   subscribe(onChange) {
     sb.channel("du-live")
@@ -65,6 +67,11 @@ const api = LIVE ? {
         if (eventType === "DELETE") S.uploads = S.uploads.filter(r => r.id !== o.id);
         else { const i = S.uploads.findIndex(r => r.id === n.id); if (i >= 0) S.uploads[i] = n; else S.uploads.unshift(n); }
         onChange();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "du_incentives" }, ({ eventType, new: n, old: o }) => {
+        S.incentives = S.incentives.filter(r => r.dealer !== (n && n.dealer) && r.dealer !== (o && o.dealer));
+        if (eventType !== "DELETE") S.incentives.push(n);
+        S.incentives.sort((a, b) => a.dealer < b.dealer ? -1 : 1); onChange();
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "du_sync_runs" }, ({ new: n }) => { if (n && (!S.sync || n.id >= S.sync.id)) { S.sync = n; onChange(); } })
       .subscribe();
@@ -94,7 +101,11 @@ function demoApi() {
     mk("Example Jeep", null, "Expected", null, null, { source: "hubspot", hubspot_ticket_id: "1002", hubspot_ticket_name: "Example Jeep – monthly upload", hubspot_owner: "Sam (demo)", hubspot_created_at: addDays(t, -1) + "T15:00:00Z", hubspot_in_stage: true, owner_id: "d3" }),
     mk("Example Acura", "Recalls", "Received", -1, null, { source: "hubspot", hubspot_ticket_id: "1003", hubspot_ticket_name: "Example Acura – recall list", hubspot_owner: "Alyssa (demo)", hubspot_created_at: addDays(t, -3) + "T15:00:00Z", hubspot_in_stage: true, row_count: 430 })];
   return {
-    async load() { S.uploads = rows; S.profiles = Object.fromEntries(people.map(([id, email, full_name]) => [id, { id, email, full_name }])); S.me = S.profiles.d1; S.sync = { started_at: new Date(Date.now() - 6 * 6e4).toISOString(), finished_at: new Date().toISOString(), found: 3, created: 0 }; },
+    async load() { S.incentives = [
+      { dealer: "Example Honda", active: "Free car wash and health inspection", at_risk: "$20 off any service", inactive: "$50 off any service", other: "Spend & Save\nSpend $100 - Save $10\nSpend $200 - Save $20", expiration: "12/31/2026", hubspot_company_id: "1", updated_at: new Date(Date.now() - 3 * 864e5).toISOString() },
+      { dealer: "Example Toyota", active: "$49.95 oil change", at_risk: "$39.95 oil change", inactive: "$19.95 oil change", other: "needs update, do not use", expiration: null, hubspot_company_id: null, updated_at: new Date(Date.now() - 864e5).toISOString() },
+      { dealer: "Example Ford", active: "NO OFFER", at_risk: "NO OFFER", inactive: "NO OFFER", other: null, expiration: null, hubspot_company_id: "3", updated_at: new Date(Date.now() - 9 * 864e5).toISOString() }];
+      S.uploads = rows; S.profiles = Object.fromEntries(people.map(([id, email, full_name]) => [id, { id, email, full_name }])); S.me = S.profiles.d1; S.sync = { started_at: new Date(Date.now() - 6 * 6e4).toISOString(), finished_at: new Date().toISOString(), found: 3, created: 0 }; },
     subscribe() {},
     async insert(b) { const r = { id: crypto.randomUUID(), created_at: new Date().toISOString(), source: "manual", ...b }; rows.unshift(r); (ev[r.id] = ev[r.id] || []).unshift({ action: "created", actor_id: "d1", created_at: r.created_at, detail: {} }); return r; },
     async update(id, p) { const r = rows.find(x => x.id === id); if (p.status && p.status !== r.status) (ev[id] = ev[id] || []).unshift({ action: "status", actor_id: "d1", created_at: new Date().toISOString(), detail: { from: r.status, to: p.status } }); Object.assign(r, p); return r; },
@@ -177,7 +188,7 @@ function fillOwners() { const s = $("f-owner"); s.replaceChildren(el("option", {
 function go(page) {
   S.page = page; store.set("du-page", page);
   document.querySelectorAll("#nav button").forEach(b => b.classList.toggle("active", b.dataset.page === page));
-  ["uploads", "hubspot", "checker", "template"].forEach(p => $("p-" + p).hidden = p !== page);
+  ["uploads", "hubspot", "incentives", "checker", "template"].forEach(p => $("p-" + p).hidden = p !== page);
   window.scrollTo(0, 0);
 }
 document.querySelectorAll("#nav button").forEach(b => b.addEventListener("click", () => go(b.dataset.page)));
@@ -186,7 +197,7 @@ function render() {
   const open = S.uploads.filter(r => r.status !== "Loaded").length;
   const hs = S.uploads.filter(r => r.source === "hubspot" && r.hubspot_in_stage !== false && r.status !== "Loaded").length;
   $("n-open").textContent = open || ""; $("n-hs").textContent = hs || "";
-  renderUploads(); renderHubspot();
+  renderUploads(); renderHubspot(); try { renderIncentives(); } catch (e) { console.error("Incentives:", e); }
   $("dealers").replaceChildren(...[...new Set(S.uploads.map(r => r.dealer).filter(Boolean))].sort().map(d => el("option", { value: d })));
 }
 
@@ -370,6 +381,8 @@ async function openDrawer(r, prefill) {
     const link = ticketLink(r, r.hubspot_ticket_name || "#" + r.hubspot_ticket_id);
     hs.replaceChildren(el("b", { text: "HubSpot ticket: " }), link, el("br"), el("span", { class: "muted", text: `${r.hubspot_in_stage === false ? "Moved out of Upload Needed" : "In Upload Needed"} · opened ${fmtDate(r.hubspot_created_at)}${r.hubspot_owner ? " · " + r.hubspot_owner : ""}` }));
   }
+  const inc = $("d-inc"), ir = incFor(d.dealer); inc.hidden = !ir;
+  if (ir) inc.replaceChildren(el("summary", {}, ["Incentives for " + ir.dealer, incFlag(ir) ? el("span", { class: "tag " + incFlag(ir)[0], text: incFlag(ir)[1] }) : null]), incBody(ir));
   $("d-activity").replaceChildren();
   $("scrim").hidden = false; $("drawer").hidden = false; setTimeout(() => $("f-dealer").focus(), 30);
   if (r) {
@@ -412,6 +425,55 @@ $("d-del").addEventListener("click", async () => {
   const b = $("d-del");
   if (!b.classList.contains("armed")) { b.classList.add("armed"); b.textContent = "Click again to delete"; setTimeout(() => { b.classList.remove("armed"); b.textContent = "Delete"; }, 4000); return; }
   try { await api.remove(S.editing.id); toast("Deleted"); closeDrawer(); render(); } catch (e) { toast("Couldn't delete: " + e.message); }
+});
+
+/* =========================================================
+   INCENTIVES (from the Google Sheet, via the sync)
+   ========================================================= */
+const nName = s => String(s || "").toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]/g, "");
+function incFor(dealer) { const n = nName(dealer); return n ? S.incentives.find(r => nName(r.dealer) === n) || S.incentives.find(r => { const m = nName(r.dealer); return m.length > 5 && (n.includes(m) || m.includes(n)); }) : null; }
+const NONE_RE = /^(no offer|none|n\/a|-|–)$/i;
+const hasOffer = v => v && !NONE_RE.test(v.trim());
+function incFlag(r) {
+  const all = [r.active, r.at_risk, r.inactive, r.other, r.expiration].join(" ");
+  if (/needs? update|do not use/i.test(all)) return ["err", "Needs update"];
+  if (![r.active, r.at_risk, r.inactive, r.other].some(hasOffer)) return ["warn", "No offer"];
+  return null;
+}
+const INC_COLS = [["active", "Active", "0–6 mo"], ["at_risk", "At-risk", "7–12 mo"], ["inactive", "Inactive", "12+ mo"], ["other", "Other incentives", ""]];
+function incBody(r) {
+  return el("div", { class: "incbody" }, [
+    ...INC_COLS.map(([k, l, sub]) => el("div", { class: "inccol" + (hasOffer(r[k]) ? "" : " none") }, [el("h4", {}, [l, sub ? el("small", { text: " " + sub }) : null]), el("p", { text: r[k] || "—" })])),
+    r.expiration ? el("div", { class: "incexp" }, [el("b", { text: "Expires " }), r.expiration]) : null]);
+}
+function renderIncentives() {
+  const R = S.incentives, q = S.incQ.toLowerCase();
+  const counts = { all: R.length, flag: R.filter(r => incFlag(r) && incFlag(r)[0] === "err").length, none: R.filter(r => incFlag(r) && incFlag(r)[0] === "warn").length, nohs: R.filter(r => !r.hubspot_company_id).length };
+  $("inc-seg").replaceChildren(...[["all", "All dealers"], ["flag", "Needs update"], ["none", "No offer"], ["nohs", "Not in HubSpot"]].map(([v, l]) =>
+    el("button", { class: S.incFilter === v ? "on" : "", role: "tab", "aria-selected": S.incFilter === v ? "true" : "false", onclick: () => { S.incFilter = v; renderIncentives(); } }, [l, el("i", { text: counts[v] })])));
+  const list = R.filter(r => (S.incFilter === "all" || (S.incFilter === "nohs" ? !r.hubspot_company_id : incFlag(r) && incFlag(r)[0] === (S.incFilter === "flag" ? "err" : "warn")))
+    && (!q || [r.dealer, r.active, r.at_risk, r.inactive, r.other].join(" ").toLowerCase().includes(q)));
+  $("inc-list").replaceChildren(...list.map(r => {
+    const f = incFlag(r), open = S.uploads.filter(u => u.status !== "Loaded" && nName(u.dealer) === nName(r.dealer)).length;
+    return el("article", { class: "inccard" }, [
+      el("header", {}, [el("h3", { text: r.dealer }), f ? el("span", { class: "tag " + f[0], text: f[1] }) : null,
+        r.hubspot_company_id ? (C.HUBSPOT_PORTAL_ID ? el("a", { class: "tag hs", href: `https://${C.HUBSPOT_HOST || "app.hubspot.com"}/contacts/${C.HUBSPOT_PORTAL_ID}/record/0-2/${r.hubspot_company_id}`, target: "_blank", rel: "noopener", text: "In HubSpot ↗" }) : el("span", { class: "tag hs", text: "In HubSpot" }))
+          : el("span", { class: "tag warn", text: "Not in HubSpot", title: "No HubSpot company has this exact name. Match the dealer name in the sheet to the company name in HubSpot." }),
+        open ? el("button", { class: "tag ok", text: open + " open upload" + (open === 1 ? "" : "s"), onclick: () => { go("uploads"); S.q = r.dealer; $("q").value = r.dealer; setStatus("open"); } }) : null,
+        el("span", { class: "faint", style: "margin-left:auto;font-size:12px", text: "Changed " + ago(r.updated_at) })]),
+      incBody(r)]);
+  }));
+  const E = $("inc-empty"); E.hidden = list.length > 0;
+  if (!list.length) E.replaceChildren(el("b", { text: R.length ? "No dealers match" : "No incentives yet" }), R.length ? "Try another filter." : "Once the Google Sheet is connected (see setup), the incentive offers appear here after the next sync.");
+  const s = S.sync; $("inc-info").textContent = R.length ? `${R.length} dealers · synced ${s ? ago(s.finished_at || s.started_at) : "–"}` : "";
+}
+$("inc-q").addEventListener("input", e => { S.incQ = e.target.value; renderIncentives(); });
+$("inc-refresh").addEventListener("click", async () => {
+  const b = $("inc-refresh"); b.disabled = true; b.textContent = "Refreshing…";
+  try { const r = await api.sync(); if (r && r.ok === false) throw new Error(r.error); const i = r && r.incentives;
+    toast(i ? `Incentives updated: ${i.dealers} dealers, ${i.changed} changed, ${i.pushed} sent to HubSpot` : "Synced. The incentive sheet isn't connected yet."); if (LIVE) await api.load(); render(); }
+  catch (e) { toast("Refresh failed: " + (e.message || e)); }
+  finally { b.disabled = false; b.textContent = "Refresh now"; }
 });
 
 /* =========================================================
@@ -516,7 +578,7 @@ $("copyhdr").addEventListener("click", async () => { try { await navigator.clipb
 })();
 
 /* ---------- start ---------- */
-go(S.page === "hubspot" || S.page === "checker" || S.page === "template" ? S.page : "uploads");
+go(["hubspot", "incentives", "checker", "template"].includes(S.page) ? S.page : "uploads");
 setMode("signin");
 boot();
 })();
