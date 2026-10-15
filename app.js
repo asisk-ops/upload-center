@@ -43,7 +43,7 @@ const ticketLink = (r, text, cls) => { const h = ticketHref(r); return h ? el("a
 const refDate = r => r.received_on || (r.hubspot_created_at || r.created_at || "").slice(0, 10);
 
 /* ---------- state ---------- */
-const S = { uploads: [], profiles: {}, me: null, sync: null, page: store.get("du-page") || "uploads",
+const S = { range: (() => { try { return JSON.parse(store.get("du-range")) || { p: "30" }; } catch (e) { return { p: "30" }; } })(), upFilter: null, uploads: [], profiles: {}, me: null, sync: null, page: store.get("du-page") || "uploads",
   status: store.get("du-status") || "open", type: "", period: store.get("du-period") || "all", q: "",
   sort: { key: "received_on", dir: "desc" }, editing: null };
 
@@ -203,7 +203,7 @@ function kpi(cls, k, v, s, onclick, unit) {
   return el(onclick ? "button" : "div", { class: "kpi " + cls, onclick, title: onclick ? "Show these files" : null },
     [el("div", { class: "k", text: k }), el("div", { class: "v" }, [fmt(v), unit ? el("small", { text: unit }) : null]), el("div", { class: "s", text: s })]);
 }
-function setStatus(st) { S.status = st; store.set("du-status", st); renderUploads(); $("rows").closest(".card").scrollIntoView({ behavior: "smooth", block: "start" }); }
+function setStatus(st) { S.upFilter = null; S.status = st; store.set("du-status", st); renderUploads(); $("rows").closest(".card").scrollIntoView({ behavior: "smooth", block: "start" }); }
 
 function renderUploads() {
   const R = S.uploads, t = today(), month = t.slice(0, 7);
@@ -218,7 +218,8 @@ function renderUploads() {
     kpi(hold.length ? "hold" : "", "On hold", hold.length, "Paused for now", () => setStatus("OnHold")),
     kpi("good", "Uploaded this month", upM.length, fmt(upM.reduce((a, r) => a + (+r.row_count || 0), 0)) + " customer rows", () => setStatus("Loaded")),
     kpi("", "Avg turnaround", avg == null ? "–" : avg, "Came in → uploaded, last 30 days", null, avg == null ? "" : avg === 1 ? "day" : "days"));
-  renderWeekly(); renderByType();
+  try { renderDaily(); } catch (e) { console.error("Daily chart:", e); }
+  try { renderByType(); } catch (e) { console.error("List type chart:", e); }
 
   // status segments
   const counts = { open: R.filter(r => r.status !== "Loaded").length, all: R.length }; STATUSES.forEach(([s]) => counts[s] = R.filter(r => r.status === s).length);
@@ -228,7 +229,10 @@ function renderUploads() {
   const q = S.q.toLowerCase(), lim = { month: t.slice(0, 7) + "-01", 30: addDays(t, -30), 90: addDays(t, -90) }[S.period];
   let list = R.filter(r => (S.status === "all" || (S.status === "open" ? r.status !== "Loaded" : r.status === S.status))
     && (!S.type || r.list_type === S.type) && (!lim || refDate(r) >= lim || r.status !== "Loaded")
-    && (!q || [r.dealer, r.file_name, r.notes, r.hubspot_ticket_name, r.hubspot_ticket_id].join(" ").toLowerCase().includes(q)));
+    && (!q || [r.dealer, r.file_name, r.notes, r.hubspot_ticket_name, r.hubspot_ticket_id].join(" ").toLowerCase().includes(q))
+    && (!S.upFilter || (r.uploaded_on && r.uploaded_on >= S.upFilter.from && r.uploaded_on <= S.upFilter.to)));
+  const uf = $("upchip"); uf.hidden = !S.upFilter;
+  if (S.upFilter) uf.replaceChildren("Uploaded " + (S.upFilter.from === S.upFilter.to ? fmtDate(S.upFilter.from) : fmtDate(S.upFilter.from) + " – " + fmtDate(S.upFilter.to)) + " ", el("button", { type: "button", "aria-label": "Clear date filter", text: "×", onclick: () => { S.upFilter = null; renderUploads(); } }));
   const { key, dir } = S.sort, order = Object.fromEntries(STATUSES.map(([s], i) => [s, i]));
   const val = r => key === "turn" ? turn(r) : key === "status" ? order[r.status] : key === "received_on" ? refDate(r) : r[key];
   list.sort((a, b) => { const x = val(a), y = val(b); if (x == null && y == null) return 0; if (x == null) return 1; if (y == null) return -1; return (x < y ? -1 : x > y ? 1 : 0) * (dir === "asc" ? 1 : -1); });
@@ -255,25 +259,73 @@ function renderUploads() {
   if (!list.length) E.replaceChildren(el("b", { text: R.length ? "Nothing matches these filters" : "No uploads yet" }), R.length ? "Try another status or All time." : "Log the first dealer list with “+ Log upload”. HubSpot tickets in Upload Needed appear here automatically once sync is set up.");
 }
 
-function renderWeekly() {
-  const t = today(), d = new Date(t + "T12:00:00"); const monday = addDays(t, -((d.getDay() + 6) % 7));
-  const weeks = Array.from({ length: 8 }, (_, i) => addDays(monday, -7 * (7 - i)));
-  const data = weeks.map(w => { const e = addDays(w, 7); const rs = S.uploads.filter(r => r.uploaded_on && r.uploaded_on >= w && r.uploaded_on < e); return { w, n: rs.length, rows: rs.reduce((a, r) => a + (+r.row_count || 0), 0) }; });
-  const W = 640, H = 190, L = 8, B = 28, T = 22, mx = Math.max(1, ...data.map(x => x.n)), bw = (W - 2 * L) / data.length;
-  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Files uploaded per week, last 8 weeks">`;
+/* ---------- Daily uploads: pick a date range, see files uploaded per day ---------- */
+function rangeOf(p) {
+  const t = today(), d = new Date(t + "T12:00:00"), mon = addDays(t, -((d.getDay() + 6) % 7));
+  if (p === "today") return [t, t];
+  if (p === "week") return [mon, t];
+  if (p === "lastweek") return [addDays(mon, -7), addDays(mon, -1)];
+  if (p === "7") return [addDays(t, -6), t];
+  if (p === "month") return [t.slice(0, 7) + "-01", t];
+  if (p === "lastmonth") { const f = new Date(d.getFullYear(), d.getMonth() - 1, 1); return [iso(f), addDays(t.slice(0, 7) + "-01", -1)]; }
+  return [addDays(t, -29), t];  // "30"
+}
+const RANGES = [["today", "Today"], ["week", "This week"], ["lastweek", "Last week"], ["7", "Last 7 days"], ["month", "This month"], ["lastmonth", "Last month"], ["30", "Last 30 days"]];
+function setRange(p, from, to) {
+  S.range = p === "custom" ? { p, from, to } : { p };
+  store.set("du-range", JSON.stringify(S.range)); renderDaily();
+}
+function curRange() { const r = S.range || { p: "30" }; if (r.p === "custom" && r.from && r.to) return r.from <= r.to ? [r.from, r.to] : [r.to, r.from]; return rangeOf(r.p === "custom" ? "30" : r.p); }
+function showUploaded(from, to) { S.upFilter = { from, to }; S.status = "all"; renderUploads(); $("rows").closest(".card").scrollIntoView({ behavior: "smooth", block: "start" }); }
+
+function renderDaily() {
+  const [from, to] = curRange(), p = (S.range || {}).p || "30";
+  // controls
+  const sel = $("dr-preset"); if (!sel.options.length) { RANGES.concat([["custom", "Custom dates"]]).forEach(([v, l]) => sel.append(el("option", { value: v, text: l }))); }
+  sel.value = p; $("dr-from").value = from; $("dr-to").value = to;
+  // data
+  const nDays = days(from, to) + 1, weekly = nDays > 62;
+  const inR = S.uploads.filter(r => r.uploaded_on && r.uploaded_on >= from && r.uploaded_on <= to);
+  const buckets = [];
+  if (weekly) { const d0 = new Date(from + "T12:00:00"); let w = addDays(from, -((d0.getDay() + 6) % 7)); while (w <= to) { buckets.push([w, addDays(w, 6)]); w = addDays(w, 7); } }
+  else for (let i = 0; i < nDays; i++) { const x = addDays(from, i); buckets.push([x, x]); }
+  const data = buckets.map(([a, b]) => { const rs = inR.filter(r => r.uploaded_on >= a && r.uploaded_on <= b); return { a, b, n: rs.length, rows: rs.reduce((s, r) => s + (+r.row_count || 0), 0) }; });
+  const rows = inR.reduce((s, r) => s + (+r.row_count || 0), 0);
+  const workdays = buckets.length && !weekly ? data.filter(x => { const g = new Date(x.a + "T12:00:00").getDay(); return g && g !== 6 && x.a <= today(); }).length : 0;
+  const best = data.reduce((m, x) => x.n > (m ? m.n : 0) ? x : m, null);
+  $("dr-title").textContent = weekly ? "Uploads per week" : "Daily uploads";
+  $("dr-stats").replaceChildren(
+    stat(fmt(inR.length), inR.length === 1 ? "file uploaded" : "files uploaded"),
+    stat(fmt(rows), "customer rows"),
+    weekly ? null : stat(workdays ? (Math.round(inR.length / workdays * 10) / 10).toString() : "–", "avg per workday"),
+    stat(best ? (weekly ? "Wk of " + fmtDate(best.a) : fmtDate(best.a)) : "–", best ? `busiest (${best.n})` : "busiest day"),
+    inR.length ? el("button", { class: "btn ghost sm", text: "List these uploads ↓", onclick: () => showUploaded(from, to) }) : null);
+  // chart
+  const W = 760, H = 200, L = 6, B = 26, T = 20, mx = Math.max(1, ...data.map(x => x.n)), bw = (W - 2 * L) / data.length, t = today();
+  const every = Math.ceil(data.length / 12);
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Files uploaded ${weekly ? "per week" : "per day"}, ${fmtDate(from)} to ${fmtDate(to)}">`;
   for (let g = 1; g <= 3; g++) { const y = H - B - (H - B - T) * g / 3; s += `<line x1="${L}" x2="${W - L}" y1="${y}" y2="${y}" stroke="var(--line)" stroke-dasharray="3 4"/>`; }
   s += `<line x1="${L}" x2="${W - L}" y1="${H - B}" y2="${H - B}" stroke="var(--line)"/>`;
   data.forEach((x, i) => {
-    const h = (H - B - T) * x.n / mx, bx = L + i * bw + bw * .2, w = bw * .6, last = i === data.length - 1;
-    s += `<rect x="${bx}" y="${H - B - h}" width="${w}" height="${Math.max(h, x.n ? 2 : 0)}" rx="3" fill="${last ? "var(--green)" : "var(--blue)"}" opacity="${last ? 1 : .8}"><title>${x.n} files · ${x.rows.toLocaleString()} rows</title></rect>`;
-    if (x.n) s += `<text x="${bx + w / 2}" y="${H - B - h - 6}" text-anchor="middle" font-size="12" font-weight="700" fill="var(--ink)">${x.n}</text>`;
-    s += `<text x="${bx + w / 2}" y="${H - 9}" text-anchor="middle" font-size="11" fill="var(--muted)">${last ? "This wk" : fmtDate(x.w)}</text>`;
+    const h = (H - B - T) * x.n / mx, w = Math.min(bw * .7, 46), bx = L + i * bw + (bw - w) / 2, now = t >= x.a && t <= x.b;
+    const g = new Date(x.a + "T12:00:00").getDay(), wkend = !weekly && (g === 0 || g === 6);
+    s += `<g class="bar" data-a="${x.a}" data-b="${x.b}" style="cursor:${x.n ? "pointer" : "default"}"><rect x="${L + i * bw}" y="${T - 4}" width="${bw}" height="${H - B - T + 4}" fill="transparent"/>`;
+    s += `<rect x="${bx}" y="${H - B - h}" width="${w}" height="${Math.max(h, x.n ? 2 : 0)}" rx="3" fill="${now ? "var(--green)" : "var(--blue)"}" opacity="${now ? 1 : .85}"/>`;
+    s += `<title>${weekly ? "Week of " + fmtDate(x.a) : new Date(x.a + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}: ${x.n} file${x.n === 1 ? "" : "s"} · ${x.rows.toLocaleString()} rows${x.n ? " — click to list them" : ""}</title></g>`;
+    if (x.n && data.length <= 45) s += `<text x="${bx + w / 2}" y="${H - B - h - 5}" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--ink)" pointer-events="none">${x.n}</text>`;
+    if (i % every === 0 || data.length <= 14) s += `<text x="${bx + w / 2}" y="${H - 8}" text-anchor="middle" font-size="10.5" fill="${wkend ? "var(--faint)" : "var(--muted)"}">${now && !weekly ? "Today" : fmtDate(x.a)}</text>`;
   });
-  $("weekly").className = "bars"; $("weekly").innerHTML = s + "</svg>";
+  const box = $("daily"); box.className = "bars"; box.innerHTML = s + "</svg>";
+  box.querySelectorAll("g.bar").forEach(gEl => gEl.addEventListener("click", () => { const a = gEl.dataset.a, b = gEl.dataset.b; if (inR.some(r => r.uploaded_on >= a && r.uploaded_on <= b)) showUploaded(a, b); }));
+  $("dr-empty").hidden = inR.length > 0;
 }
+const stat = (v, k) => el("div", { class: "dstat" }, [el("b", { text: v }), el("span", { text: k })]);
+$("dr-preset").addEventListener("change", e => { if (e.target.value === "custom") { const [f, t] = curRange(); setRange("custom", f, t); $("dr-from").focus(); } else setRange(e.target.value); });
+["dr-from", "dr-to"].forEach(id => $(id).addEventListener("change", () => { if ($("dr-from").value && $("dr-to").value) setRange("custom", $("dr-from").value, $("dr-to").value); }));
+
 function renderByType() {
   const open = S.uploads.filter(r => r.status !== "Loaded");
-  const rows = [...TYPE_NAMES, null].map(t => [t || "No list type yet", open.filter(r => (r.list_type || null) === t).length]).filter(x => x[1]).sort((a, b) => b[1] - a[1]);
+  const rows = [...new Set([...TYPE_NAMES, ...open.map(r => r.list_type).filter(Boolean)]), null].map(t => [t || "No list type yet", open.filter(r => (r.list_type || null) === t).length]).filter(x => x[1]).sort((a, b) => b[1] - a[1]);
   const mx = Math.max(1, ...rows.map(x => x[1]));
   $("bytype").replaceChildren(rows.length ? el("div", { class: "rowbars" }, rows.map(([n, c]) => el("div", { class: "rb" }, [el("span", { text: n }), el("div", { class: "tr" }, el("div", { style: `width:${c / mx * 100}%` })), el("b", { text: c })]))) : el("div", { class: "empty", text: "No open files." }));
 }
