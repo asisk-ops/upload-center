@@ -120,6 +120,17 @@ button.kpi{cursor:pointer}button.kpi:hover{border-color:var(--blue)}
 /* ---------- charts ---------- */
 .bars svg{display:block;width:100%;height:auto}
 .bars text{font-family:var(--body)}
+.bars g.bar:hover rect:nth-of-type(2){opacity:1}
+.drhead{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.drange{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.drange select,.drange input{width:auto;padding:5px 8px;font-size:13px}
+.dstats{display:flex;flex-wrap:wrap;gap:8px 22px;align-items:center;margin-bottom:10px}
+.dstat{display:flex;flex-direction:column}
+.dstat b{font:800 22px/1.1 var(--display);color:var(--navy-ink);font-variant-numeric:tabular-nums}
+.dstat span{font-size:12px;color:var(--muted)}
+.dstats .btn{margin-left:auto}
+.upchip{display:inline-flex;align-items:center;gap:6px;background:var(--info-bg);color:var(--blue);font-weight:700;font-size:12.5px;border-radius:999px;padding:4px 6px 4px 12px;white-space:nowrap}
+.upchip button{border:0;background:var(--blue);color:#fff;border-radius:50%;width:20px;height:20px;cursor:pointer;font-weight:700;line-height:1}
 .rowbars{display:flex;flex-direction:column;gap:9px}
 .rb{display:grid;grid-template-columns:minmax(0,160px) 1fr 34px;gap:10px;align-items:center;font-size:13px}
 .rb .tr{height:10px;background:var(--track);border-radius:5px;overflow:hidden}.rb .tr div{height:100%;background:var(--blue);border-radius:5px}

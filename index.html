@@ -59,13 +59,23 @@
       </header>
       <div class="kpis" id="kpis"></div>
       <div class="grid">
-        <div class="card c-7"><div class="ctitle">Uploaded per week <span>last 8 weeks</span></div><div id="weekly"></div></div>
-        <div class="card c-5"><div class="ctitle">Open files by list type</div><div id="bytype"></div></div>
+        <div class="card c-8">
+          <div class="drhead"><div class="ctitle" id="dr-title" style="margin:0">Daily uploads</div>
+            <div class="drange">
+              <select id="dr-preset" aria-label="Date range"></select>
+              <input type="date" id="dr-from" aria-label="From date"><span class="faint">to</span><input type="date" id="dr-to" aria-label="To date">
+            </div></div>
+          <div class="dstats" id="dr-stats"></div>
+          <div id="daily"></div>
+          <p class="faint" id="dr-empty" hidden style="margin:4px 0 0;font-size:12.5px">Nothing was uploaded in these dates.</p>
+        </div>
+        <div class="card c-4"><div class="ctitle">Open files by list type</div><div id="bytype"></div></div>
       </div>
       <div class="card flush">
         <div class="tbar">
           <div class="seg" id="seg" role="tablist" aria-label="Status filter"></div>
           <div class="tbar-r">
+            <span class="upchip" id="upchip" hidden></span>
             <input id="q" type="search" placeholder="Search dealer, ticket #, file, note" aria-label="Search">
             <select id="ft" aria-label="List type"><option value="">All list types</option></select>
             <select id="fp" aria-label="Period"><option value="all">All time</option><option value="month">This month</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option></select>
