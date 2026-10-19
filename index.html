@@ -7,7 +7,7 @@
 <link rel="icon" href="logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@500;600;700;800&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@500&display=swap">
-<link rel="stylesheet" href="styles.css?v=20261019d">
+<link rel="stylesheet" href="styles.css?v=20261019g">
 </head>
 <body>
 
@@ -36,6 +36,7 @@
     <nav class="nav" id="nav">
       <button data-page="uploads" class="active"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 4h14M3 10h14M3 16h9"/></svg>Uploads<em id="n-open"></em></button>
       <button data-page="hubspot"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="3"/><path d="M10 2v5M10 13v5M2 10h5M13 10h5"/></svg>HubSpot queue<em id="n-hs"></em></button>
+      <button data-page="calendar"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5h14v12H3zM3 9h14M7 3v4M13 3v4"/></svg>Calendar</button>
       <button data-page="incentives"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 8h14v9H3zM2 5h16v3H2zM10 5v12M10 5c-1-3-5-3-5 0M10 5c1-3 5-3 5 0"/></svg>Incentives</button>
       <button data-page="checker"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10l4 4 8-9"/></svg>File checker</button>
       <button data-page="template"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 2h7l4 4v12H5zM12 2v4h4"/></svg>Template</button>
@@ -92,6 +93,31 @@
     </section>
 
     <!-- HUBSPOT -->
+    <section class="page" id="p-calendar" hidden>
+      <header class="phead">
+        <div><h1>Task calendar</h1><p class="sub">Data upload tasks from HubSpot (“Pull List” tasks), synced every 15 minutes. Click a task to open it in HubSpot.</p></div>
+        <div class="actions"><span class="sync" id="cal-info"></span></div>
+      </header>
+      <div class="kpis" id="cal-kpis"></div>
+      <div class="card flush">
+        <div class="tbar calbar">
+          <div class="calnav">
+            <button class="btn ghost sm" id="cal-today">Today</button>
+            <button class="iconbtn" id="cal-prev" aria-label="Previous">‹</button>
+            <button class="iconbtn" id="cal-next" aria-label="Next">›</button>
+            <h2 id="cal-range"></h2>
+          </div>
+          <div class="calopts">
+            <div class="seg kinds" id="cal-kinds" aria-label="Task type"></div>
+            <label class="chk"><input type="checkbox" id="cal-done"> Show done</label>
+            <div class="seg" id="cal-view" role="tablist" aria-label="Calendar view"><button data-v="week">Week</button><button data-v="month">Month</button></div>
+          </div>
+        </div>
+        <div id="cal-grid"></div>
+        <div class="empty" id="cal-empty" hidden></div>
+      </div>
+    </section>
+
     <section class="page" id="p-incentives" hidden>
       <header class="phead">
         <div><h1>Dealer incentives</h1><p class="sub" id="inc-sub"></p></div>
@@ -150,11 +176,11 @@
     <!-- TEMPLATE -->
     <section class="page" id="p-template" hidden>
       <header class="phead"><div><h1>Upload template</h1><p class="sub">From the CallSource Upload List Column Header Guide: what each outbound list needs.</p></div>
-        <div class="actions"><a class="btn ghost" href="header-guide.pdf" target="_blank" rel="noopener">Open PDF ↗</a><a class="btn" href="header-guide.pdf" download="CallSource Upload List Column Header Guide.pdf">Download PDF</a></div></header>
+        <div class="actions"><a class="btn ghost" data-guide href="header-guide.pdf" target="_blank" rel="noopener">Open PDF ↗</a><a class="btn" data-guide href="header-guide.pdf" download="CallSource Upload List Column Header Guide.pdf">Download PDF</a></div></header>
       <details class="card pdfcard" open>
         <summary class="ctitle">Column Header Guide (PDF) <span>5 pages · share this with dealers</span></summary>
-        <object data="header-guide.pdf#view=FitH" type="application/pdf" class="pdfview" aria-label="CallSource Upload List Column Header Guide">
-          <p class="empty">Your browser can't show the PDF here. <a href="header-guide.pdf" target="_blank" rel="noopener">Open the PDF</a> instead.</p>
+        <object id="pdfview" type="application/pdf" class="pdfview" aria-label="CallSource Upload List Column Header Guide">
+          <p class="empty">Your browser can't show the PDF here. <a data-guide href="header-guide.pdf" target="_blank" rel="noopener">Open the PDF</a> instead.</p>
         </object>
       </details>
       <div class="card"><div class="ctitle">Header row to send a dealer <select id="hdrtype" aria-label="List type for header row" style="width:auto;font-size:13px;padding:4px 8px;text-transform:none;letter-spacing:0"></select></div>
@@ -228,6 +254,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js?v=20261015b"></script>
 <script src="rules.js?v=20261015b"></script>
-<script src="app.js?v=20261019c"></script>
+<script src="app.js?v=20261019g"></script>
 </body>
 </html>

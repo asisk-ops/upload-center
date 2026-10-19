@@ -45,7 +45,7 @@ const live = r => !(r.source === "hubspot" && r.hubspot_in_stage === false && r.
 const refDate = r => r.received_on || (r.hubspot_created_at || r.created_at || "").slice(0, 10);
 
 /* ---------- state ---------- */
-const S = { range: (() => { try { return JSON.parse(store.get("du-range")) || { p: "30" }; } catch (e) { return { p: "30" }; } })(), upFilter: null, incentives: [], incFilter: "all", incQ: "", uploads: [], profiles: {}, me: null, sync: null, page: store.get("du-page") || "uploads",
+const S = { range: (() => { try { return JSON.parse(store.get("du-range")) || { p: "30" }; } catch (e) { return { p: "30" }; } })(), upFilter: null, tasks: [], cal: { view: store.get("du-calview") || "week", anchor: null, done: store.get("du-caldone") === "1", kind: "" }, incentives: [], incFilter: "all", incQ: "", uploads: [], profiles: {}, me: null, sync: null, page: store.get("du-page") || "uploads",
   status: store.get("du-status") || "open", type: "", period: store.get("du-period") || "all", q: "",
   sort: { key: "received_on", dir: "desc" }, editing: null };
 
@@ -62,6 +62,8 @@ const api = LIVE ? {
     S.uploads = u.data; S.profiles = Object.fromEntries((p.data || []).map(x => [x.id, x])); S.sync = (s.data || [])[0] || null;
     const inc = await sb.from("du_incentives").select("*").order("dealer");  // table may not exist yet
     S.incentives = inc.error ? [] : inc.data;
+    const tk = await sb.from("du_tasks").select("*").order("due_at");  // table may not exist yet
+    S.tasks = tk.error ? [] : tk.data;
   },
   subscribe(onChange) {
     sb.channel("du-live")
@@ -74,6 +76,11 @@ const api = LIVE ? {
         S.incentives = S.incentives.filter(r => r.dealer !== (n && n.dealer) && r.dealer !== (o && o.dealer));
         if (eventType !== "DELETE") S.incentives.push(n);
         S.incentives.sort((a, b) => a.dealer < b.dealer ? -1 : 1); onChange();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "du_tasks" }, ({ eventType, new: n, old: o }) => {
+        S.tasks = S.tasks.filter(t => t.id !== (n && n.id) && t.id !== (o && o.id));
+        if (eventType !== "DELETE") S.tasks.push(n);
+        S.tasks.sort((a, b) => (a.due_at || "") < (b.due_at || "") ? -1 : 1); onChange();
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "du_sync_runs" }, ({ new: n }) => { if (n && (!S.sync || n.id >= S.sync.id)) { S.sync = n; onChange(); } })
       .subscribe();
@@ -104,6 +111,7 @@ function demoApi() {
     mk("Example Acura", "Recalls", "Received", -1, null, { source: "hubspot", hubspot_ticket_id: "1003", hubspot_ticket_name: "Example Acura – recall list", hubspot_owner: "Alyssa (demo)", hubspot_created_at: addDays(t, -3) + "T15:00:00Z", hubspot_in_stage: true, row_count: 430 })];
   return {
     async load() {
+      S.tasks = demoTasks();
       S.uploads = rows; S.profiles = Object.fromEntries(people.map(([id, email, full_name]) => [id, { id, email, full_name }])); S.me = S.profiles.d1; S.sync = { started_at: new Date(Date.now() - 6 * 6e4).toISOString(), finished_at: new Date().toISOString(), found: 3, created: 0 }; },
     subscribe() {},
     async insert(b) { const r = { id: crypto.randomUUID(), created_at: new Date().toISOString(), source: "manual", ...b }; rows.unshift(r); (ev[r.id] = ev[r.id] || []).unshift({ action: "created", actor_id: "d1", created_at: r.created_at, detail: {} }); return r; },
@@ -187,7 +195,7 @@ function fillOwners() { const s = $("f-owner"); s.replaceChildren(el("option", {
 function go(page) {
   S.page = page; store.set("du-page", page);
   document.querySelectorAll("#nav button").forEach(b => b.classList.toggle("active", b.dataset.page === page));
-  ["uploads", "hubspot", "incentives", "checker", "template"].forEach(p => $("p-" + p).hidden = p !== page);
+  ["uploads", "hubspot", "calendar", "incentives", "checker", "template"].forEach(p => $("p-" + p).hidden = p !== page);
   window.scrollTo(0, 0);
 }
 document.querySelectorAll("#nav button").forEach(b => b.addEventListener("click", () => go(b.dataset.page)));
@@ -196,7 +204,7 @@ function render() {
   const open = S.uploads.filter(r => live(r) && r.status !== "Loaded").length;
   const hs = S.uploads.filter(r => r.source === "hubspot" && r.hubspot_in_stage !== false && r.status !== "Loaded").length;
   $("n-open").textContent = open || ""; $("n-hs").textContent = hs || "";
-  renderUploads(); renderHubspot(); try { renderIncentives(); } catch (e) { console.error("Incentives:", e); }
+  renderUploads(); renderHubspot(); try { renderCalendar(); } catch (e) { console.error("Calendar:", e); } try { renderIncentives(); } catch (e) { console.error("Incentives:", e); }
   $("dealers").replaceChildren(...[...new Set(S.uploads.map(r => r.dealer).filter(Boolean))].sort().map(d => el("option", { value: d })));
 }
 
@@ -427,6 +435,84 @@ $("d-del").addEventListener("click", async () => {
 });
 
 /* =========================================================
+   CALENDAR — HubSpot tasks (du_tasks), synced every 15 minutes
+   ========================================================= */
+function demoTasks() {
+  const t = today(), mk = (d, h, m, kind, dealer, st) => { const x = new Date(addDays(t, d) + "T00:00:00"); x.setHours(h, m); return { id: "dt" + d + h + dealer.length, subject: `Pull List – ${kind} – ${dealer}`, due_at: x.toISOString(), kind, dealer, status: st || "NOT_STARTED", owner: "Vanessa (demo)" }; };
+  return [mk(-1, 9, 0, "Missed", "Example Honda", "COMPLETED"), mk(0, 9, 0, "Missed", "Example Toyota"), mk(0, 9, 0, "Missed", "Example Ford"), mk(0, 15, 30, "Appt Conf", "Example Toyota"),
+    mk(1, 9, 0, "Missed", "Example Kia"), mk(1, 15, 30, "Appt Conf", "Example Kia"), mk(2, 9, 0, "Missed", "Example Mazda"), mk(-2, 9, 0, "Missed", "Example Jeep")];
+}
+const dayKey = d => iso(d);
+const taskDay = t => t.due_at ? dayKey(new Date(t.due_at)) : null;
+const taskTime = t => t.due_at ? new Date(t.due_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "";
+const isDone = t => /^COMPLETED$/i.test(t.status || "");
+const isOverdue = t => !isDone(t) && t.due_at && new Date(t.due_at) < new Date() && taskDay(t) < today();
+const kindCls = k => /miss/i.test(k || "") ? "k-missed" : /appt|conf/i.test(k || "") ? "k-appt" : "k-other";
+const taskUrl = t => C.HUBSPOT_PORTAL_ID && /^\d+$/.test(t.id) ? `https://${C.HUBSPOT_HOST || "app.hubspot.com"}/tasks/${C.HUBSPOT_PORTAL_ID}/view/all/task/${t.id}` : null;
+function weekStart(dStr) { const d = new Date(dStr + "T12:00:00"); return addDays(dStr, -((d.getDay() + 6) % 7)); }
+function calTasks() { return S.tasks.filter(t => (S.cal.done || !isDone(t)) && (!S.cal.kind || (t.kind || "Other") === S.cal.kind)); }
+function taskCard(t, compact) {
+  const url = taskUrl(t), open = S.uploads.find(u => live(u) && u.status !== "Loaded" && nName(u.dealer) === nName(t.dealer));
+  const cls = "tcard " + kindCls(t.kind) + (isDone(t) ? " done" : "") + (isOverdue(t) ? " over" : "");
+  const kids = compact
+    ? [el("b", { text: taskTime(t) }), " ", t.dealer || t.subject]
+    : [el("div", { class: "trow" }, [el("b", { text: taskTime(t) }), el("span", { class: "tkind", text: t.kind || "Task" }), isDone(t) ? el("span", { class: "tdone", text: "Done" }) : isOverdue(t) ? el("span", { class: "tlate", text: "Overdue" }) : null]),
+       el("div", { class: "tdealer", text: t.dealer || t.subject }),
+       t.owner || open ? el("div", { class: "tmeta" }, [t.owner ? t.owner : null, open ? el("button", { type: "button", class: "tlink", text: "Open upload", onclick: e => { e.preventDefault(); e.stopPropagation(); openDrawer(open); } }) : null]) : null];
+  return el(url ? "a" : "div", { class: cls, href: url, target: url ? "_blank" : null, rel: url ? "noopener" : null, title: t.subject + (url ? " — open in HubSpot" : "") }, kids);
+}
+function renderCalendar() {
+  const t = today(); if (!S.cal.anchor) S.cal.anchor = t;
+  const all = S.tasks, open = all.filter(x => !isDone(x));
+  const wk0 = weekStart(t), wk1 = addDays(wk0, 6);
+  const inWeek = x => { const d = taskDay(x); return d >= wk0 && d <= wk1; };
+  $("cal-kpis").replaceChildren(
+    kpi("", "Due today", open.filter(x => taskDay(x) === t).length, "Open tasks for today", () => { S.cal.view = "week"; S.cal.anchor = t; renderCalendar(); }),
+    kpi(open.some(isOverdue) ? "bad" : "", "Overdue", open.filter(isOverdue).length, "Past due and not done"),
+    kpi("", "This week", all.filter(inWeek).length, "Tasks Mon–Sun"),
+    kpi("good", "Done this week", all.filter(x => inWeek(x) && isDone(x)).length, "Completed in HubSpot"));
+  // kind filter
+  const kinds = [...new Set(all.map(x => x.kind || "Other"))].sort();
+  $("cal-kinds").replaceChildren(...[["", "All"], ...kinds.map(k => [k, k])].map(([v, l]) => el("button", { class: (S.cal.kind === v ? "on " : "") + (v ? kindCls(v) : ""), onclick: () => { S.cal.kind = v; renderCalendar(); } }, [v ? el("i", { class: "dot" }) : null, l, el("i", { text: v ? all.filter(x => (x.kind || "Other") === v).length : all.length })])));
+  document.querySelectorAll("#cal-view button").forEach(b => b.classList.toggle("on", b.dataset.v === S.cal.view));
+  $("cal-done").checked = S.cal.done;
+  const list = calTasks(), byDay = {}; list.forEach(x => { const d = taskDay(x); (byDay[d] = byDay[d] || []).push(x); });
+  const box = $("cal-grid"); box.className = "cal " + S.cal.view;
+  const dayHead = d => { const dt = new Date(d + "T12:00:00"); return [el("span", { class: "dname", text: dt.toLocaleDateString("en-US", { weekday: "short" }) }), el("span", { class: "dnum" + (d === t ? " today" : ""), text: dt.getDate() })]; };
+  if (S.cal.view === "week") {
+    const s0 = weekStart(S.cal.anchor), daysArr = Array.from({ length: 7 }, (_, i) => addDays(s0, i));
+    $("cal-range").textContent = fmtDate(s0) + " – " + fmtDate(daysArr[6]);
+    box.replaceChildren(...daysArr.map(d => {
+      const items = byDay[d] || [], g = new Date(d + "T12:00:00").getDay();
+      return el("section", { class: "cday" + (d === t ? " is-today" : "") + (g === 0 || g === 6 ? " wkend" : "") + (d < t ? " past" : "") }, [
+        el("header", {}, [...dayHead(d), items.length ? el("em", { text: items.length }) : null]),
+        el("div", { class: "citems" }, items.length ? items.map(x => taskCard(x)) : [el("p", { class: "cnone", text: g === 0 || g === 6 ? "" : "No tasks" })])]);
+    }));
+  } else {
+    const a = new Date(S.cal.anchor + "T12:00:00"), first = iso(new Date(a.getFullYear(), a.getMonth(), 1)), start = weekStart(first);
+    $("cal-range").textContent = a.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+    const cells = Array.from({ length: 42 }, (_, i) => addDays(start, i));
+    const heads = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(n => el("div", { class: "mhead", text: n }));
+    box.replaceChildren(...heads, ...cells.map(d => {
+      const items = byDay[d] || [], other = d.slice(0, 7) !== first.slice(0, 7);
+      return el("section", { class: "mcell" + (other ? " other" : "") + (d === t ? " is-today" : ""), onclick: () => { S.cal.view = "week"; S.cal.anchor = d; store.set("du-calview", "week"); renderCalendar(); } }, [
+        el("span", { class: "dnum" + (d === t ? " today" : ""), text: new Date(d + "T12:00:00").getDate() }),
+        ...items.slice(0, 3).map(x => taskCard(x, true)),
+        items.length > 3 ? el("span", { class: "more", text: "+" + (items.length - 3) + " more" }) : null]);
+    }));
+  }
+  const E = $("cal-empty"); E.hidden = all.length > 0;
+  if (!all.length) E.replaceChildren(el("b", { text: "No tasks synced yet" }), "Once the sync is updated (see setup), HubSpot “Pull List” tasks show up here every 15 minutes.");
+  const s = S.sync; $("cal-info").textContent = s ? "Synced " + ago(s.finished_at || s.started_at) : "";
+}
+function calMove(dir) { const a = S.cal.anchor || today(); if (S.cal.view === "week") S.cal.anchor = addDays(a, 7 * dir); else { const d = new Date(a + "T12:00:00"); S.cal.anchor = iso(new Date(d.getFullYear(), d.getMonth() + dir, 1)); } renderCalendar(); }
+$("cal-prev").addEventListener("click", () => calMove(-1));
+$("cal-next").addEventListener("click", () => calMove(1));
+$("cal-today").addEventListener("click", () => { S.cal.anchor = today(); renderCalendar(); });
+document.querySelectorAll("#cal-view button").forEach(b => b.addEventListener("click", () => { S.cal.view = b.dataset.v; store.set("du-calview", S.cal.view); renderCalendar(); }));
+$("cal-done").addEventListener("change", e => { S.cal.done = e.target.checked; store.set("du-caldone", e.target.checked ? "1" : "0"); renderCalendar(); });
+
+/* =========================================================
    INCENTIVES — from Supabase (Google Sheet sync) when set up, otherwise from incentives.csv in this site
    ========================================================= */
 const nName = s => String(s || "").toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]/g, "");
@@ -627,7 +713,7 @@ $("copyhdr").addEventListener("click", async () => { try { await navigator.clipb
 })();
 
 /* ---------- start ---------- */
-go(["hubspot", "incentives", "checker", "template"].includes(S.page) ? S.page : "uploads");
+go(["hubspot", "calendar", "incentives", "checker", "template"].includes(S.page) ? S.page : "uploads");
 setMode("signin");
 boot();
 })();

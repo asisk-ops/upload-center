@@ -270,3 +270,48 @@ a.src{text-decoration:none}a.src:hover{text-decoration:underline}
 .pdfcard summary.ctitle{justify-content:flex-start;align-items:center}
 .pdfcard summary.ctitle span{margin-left:auto}
 a.btn{text-decoration:none}
+
+/* calendar */
+.calbar{align-items:center}
+.calnav{display:flex;align-items:center;gap:6px}
+.calnav h2{font:700 18px var(--display);color:var(--navy-ink);margin:0 0 0 8px;white-space:nowrap}
+.calopts{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-left:auto}
+.chk{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--muted);white-space:nowrap}
+.chk input{width:auto}
+.seg.kinds .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--kc);margin-right:6px;font-style:normal}
+.k-missed{--kc:#c27610;--kbg:var(--warn-bg)}.k-appt{--kc:var(--blue);--kbg:var(--info-bg)}.k-other{--kc:var(--slate);--kbg:var(--track)}
+.cal.week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));min-height:420px}
+@media (max-width:900px){.cal.week{grid-template-columns:1fr}}
+.cday{border-right:1px solid var(--line);display:flex;flex-direction:column;min-width:0}
+.cday:last-child{border-right:0}
+.cday header{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line)}
+.cday header em{margin-left:auto;font:700 11px var(--body);font-style:normal;background:var(--track);color:var(--muted);border-radius:999px;padding:1px 8px}
+.cday.wkend{background:color-mix(in srgb,var(--track) 45%,transparent)}
+.cday.is-today{background:color-mix(in srgb,var(--blue) 6%,var(--card))}
+.dname{font:700 11px var(--body);letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.dnum{font:700 16px var(--display);color:var(--ink)}
+.dnum.today{background:var(--blue);color:#fff;border-radius:999px;min-width:26px;height:26px;display:inline-grid;place-items:center;padding:0 6px}
+.citems{display:flex;flex-direction:column;gap:8px;padding:10px}
+.cnone{margin:6px 2px;color:var(--faint);font-size:12.5px}
+.tcard{display:block;text-decoration:none;color:var(--ink);background:var(--kbg);border-left:3px solid var(--kc);border-radius:7px;padding:8px 10px;font-size:13px;transition:transform .1s}
+a.tcard:hover{transform:translateY(-1px);box-shadow:var(--shadow)}
+.tcard .trow{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.tcard .trow b{font-variant-numeric:tabular-nums}
+.tkind{font:700 10.5px var(--body);letter-spacing:.05em;text-transform:uppercase;color:var(--kc)}
+.tdealer{font-weight:700;margin-top:3px;overflow-wrap:anywhere;line-height:1.3}
+.tmeta{display:flex;gap:8px;align-items:center;margin-top:4px;font-size:11.5px;color:var(--muted);flex-wrap:wrap}
+.tlink{border:0;background:none;color:var(--blue);font:700 11.5px var(--body);padding:0;cursor:pointer}
+.tdone{font:700 10px var(--body);text-transform:uppercase;color:var(--green);margin-left:auto}
+.tlate{font:700 10px var(--body);text-transform:uppercase;color:var(--red);margin-left:auto}
+.tcard.done{opacity:.6}.tcard.done .tdealer{text-decoration:line-through}
+.tcard.over{border-left-color:var(--red)}
+.cal.month{display:grid;grid-template-columns:repeat(7,minmax(0,1fr))}
+.mhead{padding:8px 10px;font:700 11px var(--body);letter-spacing:.07em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line)}
+.mcell{min-height:112px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:6px;display:flex;flex-direction:column;gap:4px;cursor:pointer;min-width:0}
+.mcell:nth-child(7n+7){border-right:0}
+.mcell:hover{background:var(--row-hover)}
+.mcell.other{background:color-mix(in srgb,var(--track) 40%,transparent)}.mcell.other .dnum{color:var(--faint)}
+.mcell .dnum{font-size:13px;align-self:flex-start}
+.mcell .tcard{padding:3px 6px;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mcell .more{font:700 11.5px var(--body);color:var(--blue)}
+@media (max-width:700px){.mcell .tcard{display:none}.mcell{min-height:56px}}
