@@ -111,7 +111,7 @@
 
     <section class="page" id="p-hubspot" hidden>
       <header class="phead">
-        <div><h1>HubSpot queue</h1><p class="sub">Tickets in the <b>Upload Needed</b> stage, kept in step with Uploads every 15 minutes. When a ticket moves on in HubSpot, its file is marked Uploaded here (On hold files stay on hold).</p></div>
+        <div><h1>HubSpot queue</h1><p class="sub">Only tickets currently in the <b>Upload Needed</b> stage in HubSpot. Checked every 15 minutes; when a ticket moves on in HubSpot it drops off this page.</p></div>
         <div class="actions"><span class="sync" id="syncinfo"></span><button class="btn" id="syncnow">Sync now</button></div>
       </header>
       <div class="kpis" id="hs-kpis"></div>
@@ -121,13 +121,6 @@
           <tbody id="hs-rows"></tbody>
         </table></div>
         <div class="empty" id="hs-empty" hidden></div>
-      </div>
-      <div class="card flush" id="hs-off" hidden>
-        <div class="ctitle pad">Still open here, moved on in HubSpot <span><b id="hs-off-n"></b> · usually On hold files. Change the status here if they're done.</span></div>
-        <div class="table-wrap"><table class="tbl">
-          <thead><tr><th>Ticket</th><th>Dealer</th><th>Ticket age</th><th>HubSpot owner</th><th>List</th><th>Tracker status</th><th>Came in</th><th>Uploaded</th></tr></thead>
-          <tbody id="hs-off-rows"></tbody>
-        </table></div>
       </div>
     </section>
 
@@ -228,6 +221,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js?v=20261015b"></script>
 <script src="rules.js?v=20261015b"></script>
-<script src="app.js?v=20261019a"></script>
+<script src="app.js?v=20261019b"></script>
 </body>
 </html>

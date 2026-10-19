@@ -522,14 +522,14 @@ $("inc-refresh").addEventListener("click", async () => {
 function renderHubspot() {
   const H = S.uploads.filter(r => r.source === "hubspot");
   const list = H.filter(r => r.hubspot_in_stage !== false).sort((a, b) => (a.hubspot_created_at || "") < (b.hubspot_created_at || "") ? -1 : 1);
-  const off = H.filter(r => r.hubspot_in_stage === false && r.status !== "Loaded");
   const t = today(), age = r => r.hubspot_created_at ? days(r.hubspot_created_at.slice(0, 10), t) : null;
   const ages = list.map(age).filter(x => x != null), oldest = ages.length ? Math.max(...ages) : null;
   const notIn = list.filter(r => r.status === "Expected");
   $("hs-kpis").replaceChildren(
     kpi("", "In Upload Needed", list.length, "Tickets in that HubSpot stage"),
     kpi(notIn.length ? "warn" : "", "List not in yet", notIn.length, "Still Expected in the tracker", notIn.length ? () => { go("uploads"); setStatus("Expected"); } : null),
-    kpi(off.length ? "hold" : "", "Open here, moved on in HubSpot", off.length, off.length ? "Mostly On hold files" : "Pages match", off.length ? () => $("hs-off").scrollIntoView({ behavior: "smooth" }) : null),
+    kpi("", "List received", list.filter(r => r.status === "Received" || r.status === "Ready").length, "Waiting to be uploaded"),
+    kpi(list.some(r => r.status === "OnHold") ? "hold" : "", "On hold", list.filter(r => r.status === "OnHold").length, "In Upload Needed, paused here"),
     kpi(oldest > 7 ? "bad" : "", "Oldest ticket", oldest == null ? "–" : oldest, "Since the ticket opened", null, oldest == null ? "" : oldest === 1 ? "day" : "days"),
     kpi("good", "Uploaded from HubSpot", H.filter(r => r.status === "Loaded").length, "All time", () => { go("uploads"); setStatus("Loaded"); }));
   const s = S.sync, info = $("syncinfo");
@@ -548,8 +548,6 @@ function renderHubspot() {
   $("hs-rows").replaceChildren(...list.map(row));
   const E = $("hs-empty"); E.hidden = list.length > 0;
   if (!list.length) E.replaceChildren(el("b", { text: "No tickets in Upload Needed" }), s ? "Nothing is waiting in HubSpot right now." : "Once the HubSpot sync is set up, tickets show up here.");
-  $("hs-off").hidden = !off.length; $("hs-off-n").textContent = off.length;
-  $("hs-off-rows").replaceChildren(...off.map(row));
 }
 $("syncnow").addEventListener("click", async () => {
   const b = $("syncnow"); b.disabled = true; b.textContent = "Syncing…";
