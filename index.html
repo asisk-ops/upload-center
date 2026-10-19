@@ -7,7 +7,7 @@
 <link rel="icon" href="logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@500;600;700;800&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@500&display=swap">
-<link rel="stylesheet" href="styles.css?v=20261016d">
+<link rel="stylesheet" href="styles.css?v=20261019d">
 </head>
 <body>
 
@@ -149,7 +149,14 @@
 
     <!-- TEMPLATE -->
     <section class="page" id="p-template" hidden>
-      <header class="phead"><div><h1>Upload template</h1><p class="sub">From the CallSource Upload List Column Header Guide: what each outbound list needs.</p></div></header>
+      <header class="phead"><div><h1>Upload template</h1><p class="sub">From the CallSource Upload List Column Header Guide: what each outbound list needs.</p></div>
+        <div class="actions"><a class="btn ghost" href="header-guide.pdf" target="_blank" rel="noopener">Open PDF ↗</a><a class="btn" href="header-guide.pdf" download="CallSource Upload List Column Header Guide.pdf">Download PDF</a></div></header>
+      <details class="card pdfcard" open>
+        <summary class="ctitle">Column Header Guide (PDF) <span>5 pages · share this with dealers</span></summary>
+        <object data="header-guide.pdf#view=FitH" type="application/pdf" class="pdfview" aria-label="CallSource Upload List Column Header Guide">
+          <p class="empty">Your browser can't show the PDF here. <a href="header-guide.pdf" target="_blank" rel="noopener">Open the PDF</a> instead.</p>
+        </object>
+      </details>
       <div class="card"><div class="ctitle">Header row to send a dealer <select id="hdrtype" aria-label="List type for header row" style="width:auto;font-size:13px;padding:4px 8px;text-transform:none;letter-spacing:0"></select></div>
         <div class="codeline"><code id="hdrline"></code><button class="btn sm" id="copyhdr">Copy</button></div></div>
       <div class="grid">
@@ -221,6 +228,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js?v=20261015b"></script>
 <script src="rules.js?v=20261015b"></script>
-<script src="app.js?v=20261019b"></script>
+<script src="app.js?v=20261019c"></script>
 </body>
 </html>
