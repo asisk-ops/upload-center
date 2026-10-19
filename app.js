@@ -639,7 +639,18 @@ function renderHubspot() {
 }
 $("syncnow").addEventListener("click", async () => {
   const b = $("syncnow"); b.disabled = true; b.textContent = "Syncing…";
-  try { const r = await api.sync(); if (r && r.ok === false) throw new Error(r.error); toast(`HubSpot synced: ${r.found} in Upload Needed, ${r.created} new${r.closed ? `, ${r.closed} marked Uploaded` : ""}`); if (LIVE) await api.load(); render(); }
+  try {
+    const job = api.sync();
+    const r = await Promise.race([job, new Promise(ok => setTimeout(() => ok("slow"), 12000))]);
+    if (r === "slow") {  // keep going in the background; live updates refresh the page when it finishes
+      toast("Still syncing in the background. The page updates by itself when it's done.");
+      job.then(async () => { if (LIVE) await api.load(); render(); }).catch(e => toast("Sync failed: " + (e.message || e)));
+      return;
+    }
+    if (r && r.ok === false) throw new Error(r.error);
+    toast(`HubSpot synced: ${r.found} in Upload Needed, ${r.created} new${r.closed ? `, ${r.closed} marked Uploaded` : ""}${r.tasks ? `, ${r.tasks.tasks} tasks` : ""}`);
+    if (LIVE) await api.load(); render();
+  }
   catch (e) { toast("Sync failed: " + (e.message || e)); }
   finally { b.disabled = false; b.textContent = "Sync now"; }
 });
