@@ -7,7 +7,7 @@
 <link rel="icon" href="logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@500;600;700;800&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@500&display=swap">
-<link rel="stylesheet" href="styles.css?v=20261016b">
+<link rel="stylesheet" href="styles.css?v=20261016d">
 </head>
 <body>
 
@@ -21,7 +21,7 @@
   <form id="authform" class="auth-card" novalidate>
     <h2 id="auth-title">Sign in</h2>
     <label class="fld" id="row-name" hidden><span>Full name</span><input id="a-name" autocomplete="name"></label>
-    <label class="fld"><span>Work email</span><input id="a-email" type="email" autocomplete="email" required placeholder="you@callsourceauto.com"></label>
+    <label class="fld"><span>Work email</span><input id="a-email" type="email" autocomplete="email" required placeholder="you@company.com"></label>
     <label class="fld" id="row-pass"><span>Password</span><input id="a-pass" type="password" autocomplete="current-password" minlength="8" required></label>
     <p class="auth-msg" id="auth-msg" role="status"></p>
     <button class="btn block" id="auth-go" type="submit">Sign in</button>
@@ -111,7 +111,7 @@
 
     <section class="page" id="p-hubspot" hidden>
       <header class="phead">
-        <div><h1>HubSpot queue</h1><p class="sub">Tickets in the <b>Upload Needed</b> stage. New tickets are added to Uploads automatically every 15 minutes.</p></div>
+        <div><h1>HubSpot queue</h1><p class="sub">Tickets in the <b>Upload Needed</b> stage, kept in step with Uploads every 15 minutes. When a ticket moves on in HubSpot, its file is marked Uploaded here (On hold files stay on hold).</p></div>
         <div class="actions"><span class="sync" id="syncinfo"></span><button class="btn" id="syncnow">Sync now</button></div>
       </header>
       <div class="kpis" id="hs-kpis"></div>
@@ -121,6 +121,13 @@
           <tbody id="hs-rows"></tbody>
         </table></div>
         <div class="empty" id="hs-empty" hidden></div>
+      </div>
+      <div class="card flush" id="hs-off" hidden>
+        <div class="ctitle pad">Still open here, moved on in HubSpot <span><b id="hs-off-n"></b> · usually On hold files. Change the status here if they're done.</span></div>
+        <div class="table-wrap"><table class="tbl">
+          <thead><tr><th>Ticket</th><th>Dealer</th><th>Ticket age</th><th>HubSpot owner</th><th>List</th><th>Tracker status</th><th>Came in</th><th>Uploaded</th></tr></thead>
+          <tbody id="hs-off-rows"></tbody>
+        </table></div>
       </div>
     </section>
 
@@ -221,6 +228,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js?v=20261015b"></script>
 <script src="rules.js?v=20261015b"></script>
-<script src="app.js?v=20261016c"></script>
+<script src="app.js?v=20261019a"></script>
 </body>
 </html>

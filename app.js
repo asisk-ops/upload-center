@@ -21,7 +21,7 @@ function el(tag, props = {}, kids = []) {
   (Array.isArray(kids) ? kids : [kids]).forEach(c => c != null && c !== false && e.append(c));
   return e;
 }
-const fmt = n => n == null || n === "" ? "–" : Number(n).toLocaleString("en-US");
+const fmt = n => n == null || n === "" ? "–" : isNaN(Number(n)) ? String(n) : Number(n).toLocaleString("en-US");
 const iso = d => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 const today = () => iso(new Date());
 const addDays = (s, n) => { const d = new Date(s + "T12:00:00"); d.setDate(d.getDate() + n); return iso(d); };
@@ -129,7 +129,6 @@ function setMode(m, msg = "", ok = false) {
 $("authform").addEventListener("submit", async e => {
   e.preventDefault();
   const email = $("a-email").value.trim().toLowerCase(), pass = $("a-pass").value, btn = $("auth-go");
-  if (mode !== "newpass" && !email.endsWith("@" + DOMAIN)) return setMode(mode, `Use your @${DOMAIN} email address.`);
   if ((mode === "signup" || mode === "newpass") && pass.length < 8) return setMode(mode, "Passwords need at least 8 characters.");
   if (mode === "signup" || mode === "reset") return setMode("signin", "Ask your admin to create your account or reset your password.");
   btn.disabled = true;
@@ -151,9 +150,9 @@ $("signout").addEventListener("click", async () => { if (LIVE) await sb.auth.sig
 async function enter(session) {
   if (LIVE) {
     const email = (session.user.email || "").toLowerCase();
-    if (!email.endsWith("@" + DOMAIN)) { await sb.auth.signOut(); $("auth").hidden = false; $("app").hidden = true; return setMode("signin", `Only @${DOMAIN} accounts can use the Upload Center.`); }
+    // Access = a @callsourceauto.com email, or an email an admin added to du_extra_members in Supabase.
     const { data: member, error: memberErr } = await sb.rpc("du_is_team");
-    if (!memberErr && member === false) { await sb.auth.signOut(); $("auth").hidden = false; $("app").hidden = true; return setMode("signin", "This account doesn't have access to the Upload Center. Ask an Upload Center admin to add you."); }
+    if ((memberErr && !email.endsWith("@" + DOMAIN)) || (!memberErr && member === false)) { await sb.auth.signOut(); $("auth").hidden = false; $("app").hidden = true; return setMode("signin", "This account doesn't have access to the Upload Center. Ask an Upload Center admin to add you."); }
     S.me = { id: session.user.id, email, full_name: session.user.user_metadata?.full_name || "" };
   }
   $("auth").hidden = true; $("app").hidden = false;
@@ -252,7 +251,7 @@ function renderUploads() {
     up.addEventListener("change", () => quickUploaded(r, up.value));
     const tn = turn(r);
     return el("tr", { class: "click", onclick: () => openDrawer(r) }, [
-      el("td", { class: "dealer" }, [el("b", {}, [r.dealer, r.source === "hubspot" ? (ticketHref(r) ? el("a", { class: "src", href: ticketHref(r), target: "_blank", rel: "noopener", title: "Open ticket in HubSpot", text: "HubSpot ↗", onclick: e => e.stopPropagation() }) : el("span", { class: "src", text: "HubSpot" })) : null]), r.file_name ? el("small", { text: r.file_name }) : null, r.list_url ? el("a", { class: "listlink", href: r.list_url, target: "_blank", rel: "noopener", text: "Open list ↗", onclick: e => e.stopPropagation() }) : null, ticketHref(r) ? ticketLink(r, "View ticket #" + r.hubspot_ticket_id + " ↗", "listlink tixlink") : null]),
+      el("td", { class: "dealer" }, [el("b", {}, [r.dealer, r.source === "hubspot" ? (ticketHref(r) ? el("a", { class: "src", href: ticketHref(r), target: "_blank", rel: "noopener", title: "Open ticket in HubSpot", text: "HubSpot ↗", onclick: e => e.stopPropagation() }) : el("span", { class: "src", text: "HubSpot" })) : null]), r.file_name ? el("small", { text: r.file_name }) : null, r.list_url ? el("a", { class: "listlink", href: r.list_url, target: "_blank", rel: "noopener", text: "Open list ↗", onclick: e => e.stopPropagation() }) : null, ticketHref(r) ? ticketLink(r, "View ticket #" + r.hubspot_ticket_id + " ↗", "listlink tixlink") : null, r.source === "hubspot" && r.hubspot_stage ? el("small", { class: "hsstage" + (r.hubspot_in_stage === false && r.status !== "Loaded" ? " warn" : ""), text: "HubSpot stage: " + r.hubspot_stage }) : null]),
       el("td", {}, r.list_type || el("span", { class: "late", text: "Set list type" })),
       el("td", {}, st),
       el("td", {}, r.received_on ? fmtDate(r.received_on) : (r.due_on ? el("span", {}, [el("span", { class: "faint", text: "due " + fmtDate(r.due_on) + " " }), isLate(r) ? el("span", { class: "late", text: "Late" }) : null]) : el("span", { class: "faint", text: "–" }))),
@@ -521,31 +520,40 @@ $("inc-refresh").addEventListener("click", async () => {
    HUBSPOT PAGE
    ========================================================= */
 function renderHubspot() {
-  const list = S.uploads.filter(r => r.source === "hubspot" && r.hubspot_in_stage !== false).sort((a, b) => (a.hubspot_created_at || "") < (b.hubspot_created_at || "") ? -1 : 1);
+  const H = S.uploads.filter(r => r.source === "hubspot");
+  const list = H.filter(r => r.hubspot_in_stage !== false).sort((a, b) => (a.hubspot_created_at || "") < (b.hubspot_created_at || "") ? -1 : 1);
+  const off = H.filter(r => r.hubspot_in_stage === false && r.status !== "Loaded");
   const t = today(), age = r => r.hubspot_created_at ? days(r.hubspot_created_at.slice(0, 10), t) : null;
-  const notIn = list.filter(r => r.status === "Expected"), oldest = list.length ? Math.max(...list.map(age).filter(x => x != null)) : null;
+  const ages = list.map(age).filter(x => x != null), oldest = ages.length ? Math.max(...ages) : null;
+  const notIn = list.filter(r => r.status === "Expected");
   $("hs-kpis").replaceChildren(
-    kpi("", "In Upload Needed", list.length, "Tickets in HubSpot"),
+    kpi("", "In Upload Needed", list.length, "Tickets in that HubSpot stage"),
     kpi(notIn.length ? "warn" : "", "List not in yet", notIn.length, "Still Expected in the tracker", notIn.length ? () => { go("uploads"); setStatus("Expected"); } : null),
+    kpi(off.length ? "hold" : "", "Open here, moved on in HubSpot", off.length, off.length ? "Mostly On hold files" : "Pages match", off.length ? () => $("hs-off").scrollIntoView({ behavior: "smooth" }) : null),
     kpi(oldest > 7 ? "bad" : "", "Oldest ticket", oldest == null ? "–" : oldest, "Since the ticket opened", null, oldest == null ? "" : oldest === 1 ? "day" : "days"),
-    kpi("good", "Uploaded from HubSpot", S.uploads.filter(r => r.source === "hubspot" && r.status === "Loaded").length, "All time"));
+    kpi("good", "Uploaded from HubSpot", H.filter(r => r.status === "Loaded").length, "All time", () => { go("uploads"); setStatus("Loaded"); }));
   const s = S.sync, info = $("syncinfo");
   info.className = "sync" + (s && s.error ? " err" : "");
-  info.textContent = !s ? "Not synced yet" : s.error ? "Last sync failed: " + s.error.slice(0, 90) : `Synced ${ago(s.finished_at || s.started_at)} · ${s.found ?? 0} tickets${s.created ? ", " + s.created + " new" : ""}`;
-  $("hs-rows").replaceChildren(...list.map(r => {
+  info.textContent = !s ? "Not synced yet" : s.error ? "Last sync note: " + s.error.slice(0, 90) : `Synced ${ago(s.finished_at || s.started_at)} · ${s.found ?? 0} in Upload Needed${s.created ? ", " + s.created + " new" : ""}`;
+  const row = r => {
     const a = age(r), tk = ticketLink(r, r.hubspot_ticket_name || "#" + r.hubspot_ticket_id);
+    const st = el("select", { class: "st st-" + r.status, "aria-label": "Status for " + r.dealer, onclick: e => e.stopPropagation() }, STATUSES.map(([v, l]) => { const o = el("option", { value: v, text: l }); o.selected = v === r.status; return o; }));
+    st.addEventListener("change", () => quickStatus(r, st.value));
     return el("tr", { class: "click", onclick: () => openDrawer(r) }, [
-      el("td", { class: "dealer" }, [el("b", {}, tk), el("small", { text: "#" + r.hubspot_ticket_id })]), el("td", { text: r.dealer }),
-      el("td", {}, a == null ? "–" : el("span", { class: a > 7 ? "late" : "", text: a === 0 ? "Today" : a + (a === 1 ? " day" : " days") })),
-      el("td", { text: r.hubspot_owner || "–" }), el("td", {}, r.list_url ? el("a", { class: "listlink", href: r.list_url, target: "_blank", rel: "noopener", text: "Open list ↗", onclick: e => e.stopPropagation() }) : el("span", { class: "faint", text: "No link yet" })), el("td", {}, el("span", { class: "pill st-" + r.status, text: stLabel(r.status) })),
+      el("td", { class: "dealer" }, [el("b", {}, tk), el("small", { text: "#" + r.hubspot_ticket_id + (r.hubspot_stage ? " · " + r.hubspot_stage : "") })]), el("td", { text: r.dealer }),
+      el("td", {}, a == null ? "–" : el("span", { class: a > 7 && r.hubspot_in_stage !== false ? "late" : "", text: a === 0 ? "Today" : a + (a === 1 ? " day" : " days") })),
+      el("td", { text: r.hubspot_owner || "–" }), el("td", {}, r.list_url ? el("a", { class: "listlink", href: r.list_url, target: "_blank", rel: "noopener", text: "Open list ↗", onclick: e => e.stopPropagation() }) : el("span", { class: "faint", text: "No link yet" })), el("td", {}, st),
       el("td", { text: fmtDate(r.received_on) }), el("td", { text: fmtDate(r.uploaded_on) })]);
-  }));
+  };
+  $("hs-rows").replaceChildren(...list.map(row));
   const E = $("hs-empty"); E.hidden = list.length > 0;
-  if (!list.length) E.replaceChildren(el("b", { text: "No tickets in Upload Needed" }), s ? "Every ticket in that stage is accounted for." : "Once the HubSpot sync is set up (README step 6), tickets show up here.");
+  if (!list.length) E.replaceChildren(el("b", { text: "No tickets in Upload Needed" }), s ? "Nothing is waiting in HubSpot right now." : "Once the HubSpot sync is set up, tickets show up here.");
+  $("hs-off").hidden = !off.length; $("hs-off-n").textContent = off.length;
+  $("hs-off-rows").replaceChildren(...off.map(row));
 }
 $("syncnow").addEventListener("click", async () => {
   const b = $("syncnow"); b.disabled = true; b.textContent = "Syncing…";
-  try { const r = await api.sync(); if (r && r.ok === false) throw new Error(r.error); toast(`HubSpot synced: ${r.found} tickets, ${r.created} new`); if (LIVE) await api.load(); render(); }
+  try { const r = await api.sync(); if (r && r.ok === false) throw new Error(r.error); toast(`HubSpot synced: ${r.found} in Upload Needed, ${r.created} new${r.closed ? `, ${r.closed} marked Uploaded` : ""}`); if (LIVE) await api.load(); render(); }
   catch (e) { toast("Sync failed: " + (e.message || e)); }
   finally { b.disabled = false; b.textContent = "Sync now"; }
 });
