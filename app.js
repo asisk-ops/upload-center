@@ -62,7 +62,7 @@ const api = LIVE ? {
     S.uploads = u.data; S.profiles = Object.fromEntries((p.data || []).map(x => [x.id, x])); S.sync = (s.data || [])[0] || null;
     const tk = await sb.from("du_tasks").select("*").order("due_at");  // table may not exist yet
     S.tasks = tk.error ? [] : tk.data;
-    const it = await sb.from("du_itinerary").select("*").gte("day", addDays(today(), -30));  // table may not exist yet
+    const it = await sb.from("du_itinerary").select("*").or(`day.gte.${addDays(today(), -30)},day.eq.2000-01-01`);  // recent days + everyone's routine template
     S.itin = it.error ? [] : it.data; S.itinReady = !it.error;
   },
   subscribe(onChange) {
@@ -93,7 +93,8 @@ const api = LIVE ? {
     const { data, error } = await sb.from("du_itinerary").upsert({ day, item_key: key, ...patch }, { onConflict: "day,item_key" }).select().single();
     if (error) throw error; S.itin = S.itin.filter(x => !(x.day === day && x.item_key === key)); S.itin.push(data); return data;
   },
-  async itinDel(id) { const { error } = await sb.from("du_itinerary").delete().eq("id", id); if (error) throw error; S.itin = S.itin.filter(x => x.id !== id); }
+  async itinDel(id) { const { error } = await sb.from("du_itinerary").delete().eq("id", id); if (error) throw error; S.itin = S.itin.filter(x => x.id !== id); },
+  async hasRoutine(uid) { const { count, error } = await sb.from("du_itinerary").select("id", { count: "exact", head: true }).eq("day", "2000-01-01").like("item_key", "u:" + uid + ":r:%"); return !!error || count > 0; }
 } : demoApi();
 function upsertLocal(row) { const i = S.uploads.findIndex(r => r.id === row.id); if (i >= 0) S.uploads[i] = row; else S.uploads.unshift(row); }
 
@@ -124,7 +125,8 @@ function demoApi() {
     async events(id) { return ev[id] || []; },
     async sync() { await new Promise(r => setTimeout(r, 600)); S.sync = { started_at: new Date().toISOString(), finished_at: new Date().toISOString(), found: 3, created: 0 }; return { ok: true, found: 3, created: 0 }; },
     async itinSet(day, key, patch) { let x = S.itin.find(i => i.day === day && i.item_key === key); if (!x) { x = { id: crypto.randomUUID(), day, item_key: key, created_at: new Date().toISOString() }; S.itin.push(x); } Object.assign(x, patch); return x; },
-    async itinDel(id) { S.itin = S.itin.filter(x => x.id !== id); }
+    async itinDel(id) { S.itin = S.itin.filter(x => x.id !== id); },
+    async hasRoutine(uid) { return S.itin.some(x => x.day === "2000-01-01" && x.item_key.startsWith("u:" + uid + ":r:")); }
   };
 }
 
@@ -464,6 +466,8 @@ const mine = x => x.item_key && x.item_key.startsWith("u:" + whoId() + ":");
 async function ensureRoutine() {   // managers only: give a new person the starter routine
   if (!isManager() || S.itin.some(x => x.day === ROUTINE_DAY && mine(x)) || ensureRoutine.busy) return;
   ensureRoutine.busy = true;
+  const uid = whoId();
+  if (await api.hasRoutine(uid)) { ensureRoutine.busy = false; return; }   // never re-seed someone who already has a routine
   try { for (const [t, e, x] of DEFAULT_ROUTINE) await api.itinSet(ROUTINE_DAY, uKey("r:" + crypto.randomUUID().slice(0, 8)), { label: packLabel(t, e, x), custom: true, done: false }); }
   catch (e) { /* table missing or no rights: shown via the warning */ }
   ensureRoutine.busy = false; renderToday();
@@ -528,7 +532,12 @@ function renderToday() {
     return el("li", { class: "itrow2" + (i.done ? " done" : "") + (i.kind === "extra" ? " extra" : "") }, [
       el("span", { class: "ittime", text: fmtClock(i.time) || "Anytime" }),
       el("span", { class: "itemoji", text: i.emoji, "aria-hidden": "true" }),
-      el("span", { class: "ittext" }, [i.text, i.kind === "extra" ? el("small", { text: "just today" }) : null]),
+      el("span", { class: "ittext" }, [i.text, i.kind === "extra" ? el("small", { text: "just today" }) : null,
+        mgr && i.kind === "extra" ? el("button", { type: "button", class: "mkdaily", text: "Make daily", title: "Move this into the daily routine so it shows up every day",
+          onclick: async () => { try { await api.itinSet(ROUTINE_DAY, uKey("r:" + crypto.randomUUID().slice(0, 8)), { label: packLabel(i.time, i.emoji, i.text), custom: true, done: false });
+            const wasDone = i.done; await api.itinDel(i.row.id);
+            if (wasDone) { /* keep today's tick on the new routine item */ }
+            renderToday(); toast("“" + i.text + "” is now part of the daily routine"); } catch (e) { toast("Couldn't change it: " + e.message); } } }) : null]),
       box, del]);
   }));
   if (!items.length) list.replaceChildren(el("li", { class: "empty" }, mgr ? [el("b", { text: "This list is empty" }), "Add items below, or use “Edit routine” to set the daily routine."] : [el("b", { text: "Your list isn't set up yet" }), "Your manager will add your daily routine here."]));
