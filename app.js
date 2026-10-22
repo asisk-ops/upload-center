@@ -23,7 +23,8 @@ function el(tag, props = {}, kids = []) {
 }
 const fmt = n => n == null || n === "" ? "–" : isNaN(Number(n)) ? String(n) : Number(n).toLocaleString("en-US");
 const iso = d => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
-const today = () => iso(new Date());
+const TZ = "America/Los_Angeles";  // everyone shares the same day, wherever they log in from
+const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 const addDays = (s, n) => { const d = new Date(s + "T12:00:00"); d.setDate(d.getDate() + n); return iso(d); };
 const days = (a, b) => Math.round((new Date(b + "T12:00:00") - new Date(a + "T12:00:00")) / 864e5);
 const fmtDate = s => { if (!s) return "–"; const d = new Date(s.slice(0, 10) + "T12:00:00"); return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: d.getFullYear() === new Date().getFullYear() ? undefined : "numeric" }); };
@@ -95,6 +96,7 @@ const api = LIVE ? {
     if (error) throw error; S.itin = S.itin.filter(x => !(x.day === day && x.item_key === key)); S.itin.push(data); return data;
   },
   async itinDel(id) { const { error } = await sb.from("du_itinerary").delete().eq("id", id); if (error) throw error; S.itin = S.itin.filter(x => x.id !== id); },
+  async reloadItin() { const it = await sb.from("du_itinerary").select("*").or(`day.gte.${addDays(today(), -30)},day.eq.2000-01-01`); if (!it.error) { S.itin = it.data; S.itinReady = true; } },
   async hasRoutine(uid) { const { count, error } = await sb.from("du_itinerary").select("id", { count: "exact", head: true }).eq("day", "2000-01-01").like("item_key", "u:" + uid + ":r:%"); return !!error || count > 0; }
 } : demoApi();
 function upsertLocal(row) { const i = S.uploads.findIndex(r => r.id === row.id); if (i >= 0) S.uploads[i] = row; else S.uploads.unshift(row); }
@@ -127,6 +129,7 @@ function demoApi() {
     async sync() { await new Promise(r => setTimeout(r, 600)); S.sync = { started_at: new Date().toISOString(), finished_at: new Date().toISOString(), found: 3, created: 0 }; return { ok: true, found: 3, created: 0 }; },
     async itinSet(day, key, patch) { let x = S.itin.find(i => i.day === day && i.item_key === key); if (!x) { x = { id: crypto.randomUUID(), day, item_key: key, created_at: new Date().toISOString() }; S.itin.push(x); } Object.assign(x, patch); return x; },
     async itinDel(id) { S.itin = S.itin.filter(x => x.id !== id); },
+    async reloadItin() {},
     async hasRoutine(uid) { return S.itin.some(x => x.day === "2000-01-01" && x.item_key.startsWith("u:" + uid + ":r:")); }
   };
 }
@@ -206,6 +209,7 @@ function go(page) {
   document.querySelectorAll("#nav button").forEach(b => b.classList.toggle("active", b.dataset.page === page));
   ["uploads", "today", "hubspot", "calendar", "checker", "template"].forEach(p => $("p-" + p).hidden = p !== page);
   window.scrollTo(0, 0);
+  if (page === "today" && S.me) api.reloadItin().then(() => { if (S.page === "today") renderToday(); }).catch(() => {});
 }
 document.querySelectorAll("#nav button").forEach(b => b.addEventListener("click", () => go(b.dataset.page)));
 
@@ -470,8 +474,8 @@ async function ensureRoutine() {   // managers only: give a new person the start
 function todayItems(day) {
   const routine = S.itin.filter(x => x.day === ROUTINE_DAY && mine(x) && x.item_key.includes(":r:") && !x.item_key.endsWith(":done")).map(x => ({ key: x.item_key, row: x, kind: "routine", ...unpack(x.label) }));
   const extra = S.itin.filter(x => x.day === day && mine(x) && x.item_key.includes(":x:") && !x.item_key.endsWith(":done")).map(x => ({ key: x.item_key, row: x, kind: "extra", ...unpack(x.label) }));
-  const doneSet = new Set(S.itin.filter(x => x.day === day && mine(x) && x.done && x.item_key.endsWith(":done")).map(x => x.item_key.slice(0, -5)));
-  return [...routine, ...extra].map(i => ({ ...i, done: doneSet.has(i.key) }))
+  const doneMap = new Map(S.itin.filter(x => x.day === day && mine(x) && x.done && x.item_key.endsWith(":done")).map(x => [x.item_key.slice(0, -5), x]));
+  return [...routine, ...extra].map(i => ({ ...i, done: doneMap.has(i.key), doneAt: (doneMap.get(i.key) || {}).done_at }))
     .sort((a, b) => (a.time || "99") < (b.time || "99") ? -1 : (a.time || "99") > (b.time || "99") ? 1 : 0);
 }
 function confetti(fromEl) {
@@ -528,6 +532,7 @@ function renderToday() {
       el("span", { class: "ittime", text: fmtClock(i.time) || "Anytime" }),
       el("span", { class: "itemoji", text: i.emoji, "aria-hidden": "true" }),
       el("span", { class: "ittext" }, [i.text, i.kind === "extra" ? el("small", { text: "just today" }) : null,
+        i.done && i.doneAt ? el("small", { class: "doneat", text: "✓ " + new Date(i.doneAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: TZ }) }) : null,
         mgr && i.kind === "extra" ? el("button", { type: "button", class: "mkdaily", text: "Make daily", title: "Move this into the daily routine so it shows up every day",
           onclick: async () => { try { await api.itinSet(ROUTINE_DAY, uKey("r:" + crypto.randomUUID().slice(0, 8)), { label: packLabel(i.time, i.emoji, i.text), custom: true, done: false });
             const wasDone = i.done; await api.itinDel(i.row.id);
@@ -551,7 +556,7 @@ function renderToday() {
   $("it-next").addEventListener("click", () => { S.itDay = addDays(S.itDay || today(), 1); renderToday(); });
   $("it-today").addEventListener("click", () => { S.itDay = today(); renderToday(); });
   $("it-edit").addEventListener("click", () => { S.itEdit = !S.itEdit; renderToday(); });
-  $("it-user").addEventListener("change", e => { S.itUser = e.target.value; S.itWinDraft = null; store.set("du-ituser", e.target.value); renderToday(); });
+  $("it-user").addEventListener("change", e => { S.itUser = e.target.value; S.itWinDraft = null; store.set("du-ituser", e.target.value); renderToday(); api.reloadItin().then(renderToday).catch(() => {}); });
   S.itUser = store.get("du-ituser") || null;
   $("it-form").addEventListener("submit", async e => {
     e.preventDefault(); const text = $("it-text").value.trim(); if (!text) return $("it-text").focus();

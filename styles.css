@@ -378,3 +378,6 @@ a.tcard:hover{transform:translateY(-1px);box-shadow:var(--shadow)}
 .utitle{display:flex;align-items:baseline;gap:10px}
 .utitle h2{font:700 18px var(--display);color:var(--navy-ink);margin:0}
 .utitle span{font-size:13px;font-weight:600}
+
+/* time an item was ticked off */
+.itrow2 .ittext small.doneat { color: #3a944a; background: rgba(58,148,74,.12); border-radius: 999px; padding: 1px 7px; font-weight: 700; letter-spacing: 0; text-transform: none; }
