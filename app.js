@@ -23,7 +23,7 @@ function el(tag, props = {}, kids = []) {
 }
 const fmt = n => n == null || n === "" ? "–" : isNaN(Number(n)) ? String(n) : Number(n).toLocaleString("en-US");
 const iso = d => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
-const TZ = "America/Los_Angeles";  // everyone shares the same day, wherever they log in from
+const TZ = "America/Chicago";  // everyone shares the same day, wherever they log in from
 const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 const addDays = (s, n) => { const d = new Date(s + "T12:00:00"); d.setDate(d.getDate() + n); return iso(d); };
 const days = (a, b) => Math.round((new Date(b + "T12:00:00") - new Date(a + "T12:00:00")) / 864e5);
