@@ -315,3 +315,36 @@ a.tcard:hover{transform:translateY(-1px);box-shadow:var(--shadow)}
 .mcell .tcard{padding:3px 6px;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mcell .more{font:700 11.5px var(--body);color:var(--blue)}
 @media (max-width:700px){.mcell .tcard{display:none}.mcell{min-height:56px}}
+
+/* HubSpot buckets */
+.b-data{--bc:#8a5cc7;--bbg:color-mix(in srgb,#8a5cc7 14%,var(--card))}
+.b-format{--bc:var(--amber);--bbg:var(--warn-bg)}
+.b-upload{--bc:var(--blue);--bbg:var(--info-bg)}
+.b-other{--bc:var(--slate);--bbg:var(--track)}
+.bucket{display:inline-block;font:700 10.5px var(--body);letter-spacing:.05em;text-transform:uppercase;padding:3px 8px;border-radius:999px;background:var(--bbg);color:var(--bc);white-space:nowrap}
+.seg.buckets .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--bc);margin-right:6px}
+.kpi.bucketkpi{border-top:3px solid var(--bc)}
+.kpi.bucketkpi .v{color:var(--bc)}
+.kpi.bucketkpi.on{box-shadow:0 0 0 2px var(--bc) inset}
+
+/* daily itinerary */
+.ithead{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.ithead h2{font:700 20px var(--display);color:var(--navy-ink);margin:0}
+.itprog{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--muted);font-weight:600;min-width:240px}
+.itbar{flex:1;height:8px;border-radius:999px;background:var(--track);overflow:hidden}
+.itbar div{height:100%;background:var(--green);border-radius:999px;transition:width .3s}
+.itlist{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,420px),1fr));gap:16px;align-items:start}
+.itgroup{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.itgroup h3{display:flex;justify-content:space-between;font:700 11.5px var(--body);letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:2px 0 4px}
+.itgroup h3 i{font-style:normal;letter-spacing:0}
+.itrow{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border-radius:8px;border-left:3px solid var(--kc,var(--bc,var(--line)));background:var(--kbg,var(--bbg,var(--track)));cursor:pointer}
+.itrow.over{--kc:var(--red);--kbg:var(--bad-bg)}
+.itrow input{width:18px;height:18px;margin-top:1px;flex:none;accent-color:var(--green)}
+.itmain{min-width:0;flex:1}
+.itlabel{font-weight:600;font-size:13.5px;overflow-wrap:anywhere}
+.itmeta{display:flex;gap:10px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--muted);margin-top:2px}
+.itmeta a{color:var(--hs);font-weight:700;text-decoration:none}
+.itrow.done{opacity:.6}.itrow.done .itlabel{text-decoration:line-through}
+.tlink.del{color:var(--red)}
+.itadd{display:flex;gap:8px;margin-top:4px}
+.itadd input{flex:1}

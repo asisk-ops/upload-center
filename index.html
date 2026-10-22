@@ -7,7 +7,7 @@
 <link rel="icon" href="logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@500;600;700;800&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@500&display=swap">
-<link rel="stylesheet" href="styles.css?v=20261019g">
+<link rel="stylesheet" href="styles.css?v=20261022a">
 </head>
 <body>
 
@@ -35,9 +35,9 @@
     <div class="side-brand"><img src="logo.png" alt="CallSource Automotive"><span>Data Upload Center</span></div>
     <nav class="nav" id="nav">
       <button data-page="uploads" class="active"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 4h14M3 10h14M3 16h9"/></svg>Uploads<em id="n-open"></em></button>
+      <button data-page="today"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 5l2 2 3-3M4 11l2 2 3-3M11 6h6M11 12h6M4 17h13"/></svg>Today<em id="n-today"></em></button>
       <button data-page="hubspot"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="3"/><path d="M10 2v5M10 13v5M2 10h5M13 10h5"/></svg>HubSpot queue<em id="n-hs"></em></button>
       <button data-page="calendar"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5h14v12H3zM3 9h14M7 3v4M13 3v4"/></svg>Calendar</button>
-      <button data-page="incentives"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 8h14v9H3zM2 5h16v3H2zM10 5v12M10 5c-1-3-5-3-5 0M10 5c1-3 5-3 5 0"/></svg>Incentives</button>
       <button data-page="checker"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10l4 4 8-9"/></svg>File checker</button>
       <button data-page="template"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 2h7l4 4v12H5zM12 2v4h4"/></svg>Template</button>
     </nav>
@@ -118,32 +118,27 @@
       </div>
     </section>
 
-    <section class="page" id="p-incentives" hidden>
+
+    <section class="page" id="p-today" hidden>
       <header class="phead">
-        <div><h1>Dealer incentives</h1><p class="sub" id="inc-sub"></p></div>
-        <div class="actions"><span class="sync" id="inc-info"></span><button class="btn ghost" id="inc-refresh" hidden>Refresh now</button></div>
+        <div><h1>Daily itinerary</h1><p class="sub">Today's checklist, built from HubSpot tasks, the ticket buckets and open uploads. Tick items off as you go; it starts fresh each day.</p></div>
+        <div class="actions"><button class="btn ghost sm" id="it-today">Today</button><button class="iconbtn" id="it-prev" aria-label="Previous day">‹</button><button class="iconbtn" id="it-next" aria-label="Next day">›</button></div>
       </header>
-      <div class="kpis" id="inc-kpis"></div>
-      <div class="inc-legend" aria-hidden="true"><span class="t-active">Active · 0–6 mo</span><span class="t-risk">At-risk · 7–12 mo</span><span class="t-inactive">Inactive · 12+ mo</span><span class="t-other">Other incentives</span></div>
-      <div class="card flush">
-        <div class="tbar">
-          <div class="seg" id="inc-seg" role="tablist" aria-label="Incentive filter"></div>
-          <div class="tbar-r"><input id="inc-q" type="search" placeholder="Search dealer or offer (e.g. oil change)" aria-label="Search incentives"></div>
-        </div>
-        <div class="incgrid" id="inc-list"></div>
-        <div class="empty" id="inc-empty" hidden></div>
-      </div>
+      <div class="card ithead"><h2 id="it-date"></h2><div class="itprog" id="it-progress"></div></div>
+      <p class="demo-bar" id="it-warn" hidden>Checks can't be saved yet: run <b>itinerary.sql</b> in the Supabase SQL Editor.</p>
+      <div class="itlist" id="it-list"></div>
     </section>
 
     <section class="page" id="p-hubspot" hidden>
       <header class="phead">
-        <div><h1>HubSpot queue</h1><p class="sub">Only tickets currently in the <b>Upload Needed</b> stage in HubSpot. Checked every 15 minutes; when a ticket moves on in HubSpot it drops off this page.</p></div>
+        <div><h1>HubSpot queue</h1><p class="sub">Tickets in the <b>Data Needed</b>, <b>Needs Formatting</b> and <b>Upload Needed</b> stages in HubSpot. Checked every 15 minutes; when a ticket leaves these stages it drops off this page.</p></div>
         <div class="actions"><span class="sync" id="syncinfo"></span><button class="btn" id="syncnow">Sync now</button></div>
       </header>
       <div class="kpis" id="hs-kpis"></div>
       <div class="card flush">
+        <div class="tbar"><div class="seg buckets" id="hs-seg" role="tablist" aria-label="HubSpot stage"></div></div>
         <div class="table-wrap"><table class="tbl">
-          <thead><tr><th>Ticket</th><th>Dealer</th><th>In stage</th><th>HubSpot owner</th><th>List</th><th>Tracker status</th><th>Came in</th><th>Uploaded</th></tr></thead>
+          <thead><tr><th>Ticket</th><th>Dealer</th><th>HubSpot stage</th><th>Ticket age</th><th>List</th><th>Tracker status</th><th>Came in</th><th>Uploaded</th></tr></thead>
           <tbody id="hs-rows"></tbody>
         </table></div>
         <div class="empty" id="hs-empty" hidden></div>
@@ -217,7 +212,6 @@
   <header class="dhead"><h2 id="d-title">Log upload</h2><button class="iconbtn" id="d-close" aria-label="Close">×</button></header>
   <form id="dform" class="dbody" autocomplete="off">
     <div class="hsnote" id="d-hs" hidden></div>
-    <details class="incnote" id="d-inc" hidden></details>
     <label class="fld"><span>Dealer</span><input id="f-dealer" required list="dealers"></label>
     <div class="two">
       <label class="fld"><span>List type</span><select id="f-type"><option value="">Choose…</option></select></label>
@@ -254,6 +248,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js?v=20261015b"></script>
 <script src="rules.js?v=20261020a"></script>
-<script src="app.js?v=20261020a"></script>
+<script src="app.js?v=20261022a"></script>
 </body>
 </html>
