@@ -371,3 +371,10 @@ a.tcard:hover{transform:translateY(-1px);box-shadow:var(--shadow)}
 .itctl{display:inline-flex;gap:8px;align-items:center;text-transform:none;letter-spacing:0}
 .itctl select{width:auto;font-size:13px;padding:4px 8px}
 .check:disabled{cursor:default;opacity:.85}
+
+.mkdaily{margin-left:8px;border:1px solid var(--line);background:var(--card);color:var(--blue);font:700 11px var(--body);border-radius:999px;padding:2px 9px;cursor:pointer;vertical-align:1px}
+.mkdaily:hover{border-color:var(--blue)}
+
+.utitle{display:flex;align-items:baseline;gap:10px}
+.utitle h2{font:700 18px var(--display);color:var(--navy-ink);margin:0}
+.utitle span{font-size:13px;font-weight:600}

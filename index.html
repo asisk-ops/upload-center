@@ -7,7 +7,7 @@
 <link rel="icon" href="logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@500;600;700;800&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@500&display=swap">
-<link rel="stylesheet" href="styles.css?v=20261022f">
+<link rel="stylesheet" href="styles.css?v=20261022h">
 </head>
 <body>
 
@@ -68,16 +68,16 @@
           <div id="daily"></div>
           <p class="faint" id="dr-empty" hidden style="margin:4px 0 0;font-size:12.5px">Nothing was uploaded in these dates.</p>
         </div>
-        <div class="card c-4"><div class="ctitle">Open files by list type</div><div id="bytype"></div></div>
+        <div class="card c-4"><div class="ctitle">Upload Needed by list type</div><div id="bytype"></div></div>
       </div>
       <div class="card flush">
         <div class="tbar">
-          <div class="seg" id="seg" role="tablist" aria-label="Status filter"></div>
+          <div class="utitle"><h2 id="u-title">Upload Needed</h2><span class="faint" id="u-count"></span></div>
           <div class="tbar-r">
             <span class="upchip" id="upchip" hidden></span>
             <input id="q" type="search" placeholder="Search dealer, ticket #, file, note" aria-label="Search">
             <select id="ft" aria-label="List type"><option value="">All list types</option></select>
-            <select id="fp" aria-label="Period"><option value="all">All time</option><option value="month">This month</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option></select>
+            
           </div>
         </div>
         <div class="table-wrap"><table class="tbl">
@@ -266,6 +266,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js?v=20261015b"></script>
 <script src="rules.js?v=20261022b"></script>
-<script src="app.js?v=20261022g"></script>
+<script src="app.js?v=20261022h"></script>
 </body>
 </html>

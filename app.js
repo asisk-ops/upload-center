@@ -41,6 +41,7 @@ const parseTicket = v => { v = String(v || "").trim(); if (!v) return { id: null
 const ticketHref = r => r && r.hubspot_ticket_id && portalId() ? `https://${C.HUBSPOT_HOST || "app.hubspot.com"}/contacts/${portalId()}/record/0-5/${r.hubspot_ticket_id}` : null;
 const ticketLink = (r, text, cls) => { const h = ticketHref(r); return h ? el("a", { class: cls, href: h, target: "_blank", rel: "noopener", title: "Open ticket in HubSpot", text, onclick: e => e.stopPropagation() }) : el("span", { text }); };
 /* A HubSpot file whose ticket has left "Upload Needed" counts as done, so Uploads matches the HubSpot queue. */
+const needList = () => S.uploads.filter(r => r.source === "hubspot" && r.hubspot_in_stage !== false && r.status !== "Loaded" && stageOf(r) === "Upload Needed");
 const live = r => !(r.source === "hubspot" && r.hubspot_in_stage === false && r.status !== "Loaded");
 const refDate = r => r.received_on || (r.hubspot_created_at || r.created_at || "").slice(0, 10);
 
@@ -209,7 +210,7 @@ function go(page) {
 document.querySelectorAll("#nav button").forEach(b => b.addEventListener("click", () => go(b.dataset.page)));
 
 function render() {
-  const open = S.uploads.filter(r => live(r) && r.status !== "Loaded").length;
+  const open = needList().length;
   const hs = S.uploads.filter(r => r.source === "hubspot" && r.hubspot_in_stage !== false && r.status !== "Loaded").length;
   $("n-open").textContent = open || ""; $("n-hs").textContent = hs || "";
   renderUploads(); renderHubspot(); try { renderCalendar(); } catch (e) { console.error("Calendar:", e); } try { renderToday(); } catch (e) { console.error("Today:", e); }
@@ -221,7 +222,6 @@ function render() {
    ========================================================= */
 TYPE_NAMES.forEach(n => { $("ft").append(el("option", { value: n, text: n })); $("f-type").append(el("option", { value: n, text: n })); $("c-type").append(el("option", { value: n, text: n })); });
 STATUSES.forEach(([v, l]) => $("f-status").append(el("option", { value: v, text: l })));
-$("fp").value = S.period;
 
 function kpi(cls, k, v, s, onclick, unit) {
   return el(onclick ? "button" : "div", { class: "kpi " + cls, onclick, title: onclick ? "Show these files" : null },
@@ -236,25 +236,21 @@ function renderUploads() {
   const turns = R.filter(r => r.uploaded_on && r.uploaded_on >= addDays(t, -30)).map(turn).filter(x => x != null && x >= 0);
   const avg = turns.length ? Math.round(turns.reduce((a, b) => a + b, 0) / turns.length * 10) / 10 : null;
   $("kpis").replaceChildren(
-    kpi("", "Open files", R.filter(r => r.status !== "Loaded").length, "Not uploaded yet", () => setStatus("open")),
-    kpi(iss.length ? "bad" : "", "Sent back", iss.length, fmt(iss.reduce((a, r) => a + (+r.issue_count || 0), 0)) + " rows to fix", () => setStatus("Issues")),
-    kpi(rdy.length ? "warn" : "", "Ready to upload", rdy.length, "Checked and clean", () => setStatus("Ready")),
-    kpi(hold.length ? "hold" : "", "On hold", hold.length, "Paused for now", () => setStatus("OnHold")),
-    kpi("good", "Uploaded this month", upM.length, fmt(upM.reduce((a, r) => a + (+r.row_count || 0), 0)) + " customer rows", () => setStatus("Loaded")),
+    kpi("", "Upload Needed", needList().length, "Lists waiting to be uploaded", () => { S.upFilter = null; renderUploads(); $("rows").closest(".card").scrollIntoView({ behavior: "smooth", block: "start" }); }),
+    kpi(iss.length ? "bad" : "", "Sent back", iss.length, fmt(iss.reduce((a, r) => a + (+r.issue_count || 0), 0)) + " rows to fix"),
+    kpi(rdy.length ? "warn" : "", "Ready to upload", rdy.length, "Checked and clean"),
+    kpi(hold.length ? "hold" : "", "On hold", hold.length, "Paused for now"),
+    kpi("good", "Uploaded this month", upM.length, fmt(upM.reduce((a, r) => a + (+r.row_count || 0), 0)) + " customer rows", () => showUploaded(month + "-01", t)),
     kpi("", "Avg turnaround", avg == null ? "–" : avg, "Came in → uploaded, last 30 days", null, avg == null ? "" : avg === 1 ? "day" : "days"));
   try { renderDaily(); } catch (e) { console.error("Daily chart:", e); }
   try { renderByType(); } catch (e) { console.error("List type chart:", e); }
 
-  // status segments
-  const counts = { open: R.filter(r => r.status !== "Loaded").length, all: R.length }; STATUSES.forEach(([s]) => counts[s] = R.filter(r => r.status === s).length);
-  $("seg").replaceChildren(...[["open", "Open"], ...STATUSES, ["all", "All"]].map(([v, l]) => el("button", { class: S.status === v ? "on" : "", role: "tab", "aria-selected": S.status === v ? "true" : "false", onclick: () => { S.status = v; store.set("du-status", v); renderUploads(); } }, [l, el("i", { text: counts[v] })])));
-
   // table
-  const q = S.q.toLowerCase(), lim = { month: t.slice(0, 7) + "-01", 30: addDays(t, -30), 90: addDays(t, -90) }[S.period];
-  let list = R.filter(r => (S.status === "all" || (S.status === "open" ? r.status !== "Loaded" : r.status === S.status))
-    && (!S.type || r.list_type === S.type) && (!lim || refDate(r) >= lim || r.status !== "Loaded")
-    && (!q || [r.dealer, r.file_name, r.notes, r.hubspot_ticket_name, r.hubspot_ticket_id].join(" ").toLowerCase().includes(q))
-    && (!S.upFilter || (r.uploaded_on && r.uploaded_on >= S.upFilter.from && r.uploaded_on <= S.upFilter.to)));
+  const q = S.q.toLowerCase();
+  // Without a date drill-down from the chart, the table shows only lists in HubSpot's Upload Needed stage.
+  let list = (S.upFilter ? S.uploads.filter(r => r.uploaded_on && r.uploaded_on >= S.upFilter.from && r.uploaded_on <= S.upFilter.to) : needList())
+    .filter(r => (!S.type || r.list_type === S.type) && (!q || [r.dealer, r.file_name, r.notes, r.hubspot_ticket_name, r.hubspot_ticket_id].join(" ").toLowerCase().includes(q)));
+  $("u-title").textContent = S.upFilter ? "Uploaded lists" : "Upload Needed"; $("u-count").textContent = list.length + (list.length === 1 ? " list" : " lists");
   const uf = $("upchip"); uf.hidden = !S.upFilter;
   if (S.upFilter) uf.replaceChildren("Uploaded " + (S.upFilter.from === S.upFilter.to ? fmtDate(S.upFilter.from) : fmtDate(S.upFilter.from) + " – " + fmtDate(S.upFilter.to)) + " ", el("button", { type: "button", "aria-label": "Clear date filter", text: "×", onclick: () => { S.upFilter = null; renderUploads(); } }));
   const { key, dir } = S.sort, order = Object.fromEntries(STATUSES.map(([s], i) => [s, i]));
@@ -269,7 +265,7 @@ function renderUploads() {
     up.addEventListener("change", () => quickUploaded(r, up.value));
     const tn = turn(r);
     return el("tr", { class: "click", onclick: () => openDrawer(r) }, [
-      el("td", { class: "dealer" }, [el("b", {}, [r.dealer, r.source === "hubspot" ? (ticketHref(r) ? el("a", { class: "src", href: ticketHref(r), target: "_blank", rel: "noopener", title: "Open ticket in HubSpot", text: "HubSpot ↗", onclick: e => e.stopPropagation() }) : el("span", { class: "src", text: "HubSpot" })) : null]), r.file_name ? el("small", { text: r.file_name }) : null, r.list_url ? el("a", { class: "listlink", href: r.list_url, target: "_blank", rel: "noopener", text: "Open list ↗", onclick: e => e.stopPropagation() }) : null, ticketHref(r) ? ticketLink(r, "View ticket #" + r.hubspot_ticket_id + " ↗", "listlink tixlink") : null, r.source === "hubspot" && r.hubspot_in_stage !== false ? el("div", { style: "margin-top:3px" }, stagePill(r)) : null]),
+      el("td", { class: "dealer" }, [el("b", {}, [r.dealer, r.source === "hubspot" ? (ticketHref(r) ? el("a", { class: "src", href: ticketHref(r), target: "_blank", rel: "noopener", title: "Open ticket in HubSpot", text: "HubSpot ↗", onclick: e => e.stopPropagation() }) : el("span", { class: "src", text: "HubSpot" })) : null]), r.file_name ? el("small", { text: r.file_name }) : null, r.list_url ? el("a", { class: "listlink", href: r.list_url, target: "_blank", rel: "noopener", text: "Open list ↗", onclick: e => e.stopPropagation() }) : null, ticketHref(r) ? ticketLink(r, "View ticket #" + r.hubspot_ticket_id + " ↗", "listlink tixlink") : null, r.source === "hubspot" && r.hubspot_in_stage !== false && stageOf(r) !== "Upload Needed" ? el("div", { style: "margin-top:3px" }, stagePill(r)) : null]),
       el("td", {}, r.list_type || el("span", { class: "late", text: "Set list type" })),
       el("td", {}, st),
       el("td", {}, r.received_on ? fmtDate(r.received_on) : (r.due_on ? el("span", {}, [el("span", { class: "faint", text: "due " + fmtDate(r.due_on) + " " }), isLate(r) ? el("span", { class: "late", text: "Late" }) : null]) : el("span", { class: "faint", text: "–" }))),
@@ -280,7 +276,7 @@ function renderUploads() {
       el("td", {}, who(r.owner_id))]);
   }));
   const E = $("empty"); E.hidden = list.length > 0;
-  if (!list.length) E.replaceChildren(el("b", { text: R.length ? "Nothing matches these filters" : "No uploads yet" }), R.length ? "Try another status or All time." : "Log the first dealer list with “+ Log upload”. HubSpot tickets in Upload Needed appear here automatically once sync is set up.");
+  if (!list.length) E.replaceChildren(el("b", { text: S.upFilter ? "Nothing uploaded in those dates" : S.q || S.type ? "Nothing matches your search" : "No lists in Upload Needed right now" }), S.upFilter ? "" : "When a HubSpot ticket moves into Upload Needed, it shows up here.");
 }
 
 /* ---------- Daily uploads: pick a date range, see files uploaded per day ---------- */
@@ -348,10 +344,10 @@ $("dr-preset").addEventListener("change", e => { if (e.target.value === "custom"
 ["dr-from", "dr-to"].forEach(id => $(id).addEventListener("change", () => { if ($("dr-from").value && $("dr-to").value) setRange("custom", $("dr-from").value, $("dr-to").value); }));
 
 function renderByType() {
-  const open = S.uploads.filter(r => live(r) && r.status !== "Loaded");
+  const open = needList();
   const rows = [...new Set([...TYPE_NAMES, ...open.map(r => r.list_type).filter(Boolean)]), null].map(t => [t || "No list type yet", open.filter(r => (r.list_type || null) === t).length]).filter(x => x[1]).sort((a, b) => b[1] - a[1]);
   const mx = Math.max(1, ...rows.map(x => x[1]));
-  $("bytype").replaceChildren(rows.length ? el("div", { class: "rowbars" }, rows.map(([n, c]) => el("div", { class: "rb" }, [el("span", { text: n }), el("div", { class: "tr" }, el("div", { style: `width:${c / mx * 100}%` })), el("b", { text: c })]))) : el("div", { class: "empty", text: "No open files." }));
+  $("bytype").replaceChildren(rows.length ? el("div", { class: "rowbars" }, rows.map(([n, c]) => el("div", { class: "rb" }, [el("span", { text: n }), el("div", { class: "tr" }, el("div", { style: `width:${c / mx * 100}%` })), el("b", { text: c })]))) : el("div", { class: "empty", text: "Nothing in Upload Needed." }));
 }
 
 async function quickStatus(r, status) {
@@ -368,7 +364,6 @@ async function quickUploaded(r, date) {
 }
 $("q").addEventListener("input", e => { S.q = e.target.value; renderUploads(); });
 $("ft").addEventListener("change", e => { S.type = e.target.value; renderUploads(); });
-$("fp").addEventListener("change", e => { S.period = e.target.value; store.set("du-period", S.period); renderUploads(); });
 document.querySelectorAll("#p-uploads th[data-sort]").forEach(th => th.addEventListener("click", () => { const k = th.dataset.sort; S.sort = { key: k, dir: S.sort.key === k && S.sort.dir === "desc" ? "asc" : "desc" }; renderUploads(); }));
 $("add").addEventListener("click", () => openDrawer(null));
 $("export").addEventListener("click", () => {
