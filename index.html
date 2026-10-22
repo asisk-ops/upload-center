@@ -158,7 +158,6 @@
         </div>
         <div class="card c-4"><div class="ctitle">What gets checked</div>
           <ul class="checks">
-            <li class="ok"><span>File name follows <code>Dealer_ListType_MMDDYYYY.csv</code></span></li>
             <li class="ok"><span>Required headers plus <code>email</code>, spelled exactly (any case, any order)</span></li>
             <li class="ok"><span>List-specific columns present or left out</span></li>
             <li class="ok"><span>VIN, phone, year, email and date formats</span></li>
@@ -184,7 +183,6 @@
         <div class="card c-6"><div class="ctitle">How dealers send data</div>
           <ol class="steps">
             <li><b>CSV only.</b> In Excel or Google Sheets: File &gt; Download / Save As &gt; CSV.</li>
-            <li><b>File name:</b> <code>DealerName_ListType_MMDDYYYY.csv</code>, e.g. <code>SmithHonda_Recall_10082026.csv</code>.</li>
             <li><b>Headers</b> spelled exactly, with underscores and no extra spaces or characters. Case and column order don't matter.</li>
             <li><b>Email header on every list,</b> even when there are no email addresses.</li>
             <li><b>Service type:</b> include service recommendations when they're provided.</li>
@@ -229,7 +227,7 @@
       <label class="fld"><span>Rows</span><input id="f-rows" type="number" min="0" inputmode="numeric"></label>
       <label class="fld"><span>Rows with issues</span><input id="f-issues" type="number" min="0" inputmode="numeric"></label>
     </div>
-    <label class="fld"><span>File name</span><input id="f-file" placeholder="DealerName_ListType_MMDDYYYY.csv"></label>
+    <label class="fld"><span>File name</span><input id="f-file" placeholder="The dealer's file name"></label>
     <label class="fld"><span>List link</span><input id="f-link" type="url" placeholder="Filled in from the HubSpot ticket's notes"></label>
     <label class="fld"><span>HubSpot ticket</span><input id="f-ticket" inputmode="url" placeholder="Paste the ticket link, or type the ticket number"></label>
     <label class="fld"><span>Notes</span><textarea id="f-notes" rows="3"></textarea></label>
@@ -247,7 +245,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js?v=20261015b"></script>
-<script src="rules.js?v=20261020a"></script>
+<script src="rules.js?v=20261022b"></script>
 <script src="app.js?v=20261022a"></script>
 </body>
 </html>

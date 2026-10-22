@@ -53,7 +53,7 @@ function checkFile(name,text,forced){
   const rows=parseCSV(text),R={name,issues:[],checks:[],errRows:new Set(),fixRows:new Set(),warnRows:new Set(),drop:new Set()};
   if(!rows.length){R.fatal="The file is empty.";return R}
   const fnOk=/^[A-Za-z0-9]+_[A-Za-z0-9]+_\d{8}\.csv$/i.test(name);
-  R.checks.push([fnOk?"ok":"fx",fnOk?"File name follows the naming rule":`File name should be DealerName_ListType_MMDDYYYY.csv (got “${name}”)`]);
+  // File names aren't checked; dealers can name the file anything.
   const type=forced||detectType(name);R.type=type;
   if(!type){R.fatal="Couldn't tell the list type from the file name. Pick it from the List type menu.";return R}
   R.dealer=(name.split("_")[0]||"").replace(/([a-z])([A-Z])/g,"$1 $2");
