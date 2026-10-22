@@ -7,7 +7,7 @@
 <link rel="icon" href="logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@500;600;700;800&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@500&display=swap">
-<link rel="stylesheet" href="styles.css?v=20261022a">
+<link rel="stylesheet" href="styles.css?v=20261022d">
 </head>
 <body>
 
@@ -120,13 +120,33 @@
 
 
     <section class="page" id="p-today" hidden>
-      <header class="phead">
-        <div><h1>Daily itinerary</h1><p class="sub">Today's checklist, built from HubSpot tasks, the ticket buckets and open uploads. Tick items off as you go; it starts fresh each day.</p></div>
-        <div class="actions"><button class="btn ghost sm" id="it-today">Today</button><button class="iconbtn" id="it-prev" aria-label="Previous day">‹</button><button class="iconbtn" id="it-next" aria-label="Next day">›</button></div>
-      </header>
-      <div class="card ithead"><h2 id="it-date"></h2><div class="itprog" id="it-progress"></div></div>
+      <div class="ithero">
+        <div class="itwho">
+          <p class="itkicker" id="it-greet"></p>
+          <h1 id="it-date"></h1>
+          <p class="itcheer" id="it-cheer"></p>
+          <div class="itnav"><button class="btn ghost sm" id="it-today">Today</button><button class="iconbtn" id="it-prev" aria-label="Previous day">‹</button><button class="iconbtn" id="it-next" aria-label="Next day">›</button></div>
+        </div>
+        <div class="itring" id="it-ring"></div>
+      </div>
       <p class="demo-bar" id="it-warn" hidden>Checks can't be saved yet: run <b>itinerary.sql</b> in the Supabase SQL Editor.</p>
-      <div class="itlist" id="it-list"></div>
+      <div class="itgrid">
+        <div class="card itcard">
+          <div class="ctitle">The day <span class="itctl"><select id="it-user" aria-label="Whose list" hidden></select><button class="btn ghost sm" id="it-edit" type="button">Edit routine</button></span></div>
+          <ol class="itlist2" id="it-list"></ol>
+          <form class="itform" id="it-form" autocomplete="off">
+            <select id="it-emoji" aria-label="Emoji"></select>
+            <input id="it-time" type="time" aria-label="Time (optional)">
+            <input id="it-text" type="text" placeholder="What's on the list?" aria-label="New item">
+            <button class="btn" type="submit" id="it-addto">Add to today</button>
+          </form>
+        </div>
+        <div class="card itside">
+          <div class="ctitle">Today's win 🏆</div>
+          <textarea id="it-win" rows="4" placeholder="What went well today? A tough list cleaned up, a dealer who finally sent data…"></textarea>
+          <p class="faint" id="it-note" style="font-size:12px;margin:8px 0 0"></p>
+        </div>
+      </div>
     </section>
 
     <section class="page" id="p-hubspot" hidden>
@@ -246,6 +266,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js?v=20261015b"></script>
 <script src="rules.js?v=20261022b"></script>
-<script src="app.js?v=20261022a"></script>
+<script src="app.js?v=20261022e"></script>
 </body>
 </html>

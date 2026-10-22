@@ -56,7 +56,7 @@ const api = LIVE ? {
   async load() {
     const [u, p, s] = await Promise.all([
       sb.from("du_uploads").select("*").order("created_at", { ascending: false }).limit(5000),
-      sb.from("du_profiles").select("id,email,full_name"),
+      sb.from("du_profiles").select("*"),
       sb.from("du_sync_runs").select("*").order("started_at", { ascending: false }).limit(1)]);
     if (u.error) throw u.error;
     S.uploads = u.data; S.profiles = Object.fromEntries((p.data || []).map(x => [x.id, x])); S.sync = (s.data || [])[0] || null;
@@ -116,7 +116,7 @@ function demoApi() {
   return {
     async load() {
       S.tasks = demoTasks();
-      S.uploads = rows; S.profiles = Object.fromEntries(people.map(([id, email, full_name]) => [id, { id, email, full_name }])); S.me = S.profiles.d1; S.sync = { started_at: new Date(Date.now() - 6 * 6e4).toISOString(), finished_at: new Date().toISOString(), found: 3, created: 0 }; },
+      S.uploads = rows; S.profiles = Object.fromEntries(people.map(([id, email, full_name]) => [id, { id, email, full_name, is_manager: id === "d1" }])); S.me = S.profiles.d1; S.sync = { started_at: new Date(Date.now() - 6 * 6e4).toISOString(), finished_at: new Date().toISOString(), found: 3, created: 0 }; },
     subscribe() {},
     async insert(b) { const r = { id: crypto.randomUUID(), created_at: new Date().toISOString(), source: "manual", ...b }; rows.unshift(r); (ev[r.id] = ev[r.id] || []).unshift({ action: "created", actor_id: "d1", created_at: r.created_at, detail: {} }); return r; },
     async update(id, p) { const r = rows.find(x => x.id === id); if (p.status && p.status !== r.status) (ev[id] = ev[id] || []).unshift({ action: "status", actor_id: "d1", created_at: new Date().toISOString(), detail: { from: r.status, to: p.status } }); Object.assign(r, p); return r; },
@@ -175,6 +175,7 @@ async function enter(session) {
   try { await api.load(); } catch (e) { toast("Couldn't load uploads: " + (e.message || e)); }
   if (LIVE && S.profiles[S.me.id]) S.me = S.profiles[S.me.id];
   renderMe(); fillOwners(); render();
+  if (!(S.me && S.me.is_manager)) go("today");  // team members land on their daily itinerary
   api.subscribe(render);
 }
 function boot() {
@@ -438,59 +439,127 @@ $("d-del").addEventListener("click", async () => {
 });
 
 /* =========================================================
-   TODAY — daily itinerary checklist (du_itinerary keeps the checks; resets each day)
+   TODAY — personal daily itinerary. Each person keeps their own routine (repeats every day)
+   plus extra items for the day. Stored in du_itinerary:
+     routine template rows → day 2000-01-01, item_key "u:<user>:r:<id>", label "HH:MM|emoji|text"
+     one-off rows          → that day,      item_key "u:<user>:x:<id>", same label format
+     check marks           → that day,      item_key of the routine/one-off item, done = true
+     today's win           → that day,      item_key "u:<user>:win", label = text
    ========================================================= */
-function itinItems(day) {
-  const t = today(), items = [];
-  const tasksDay = S.tasks.filter(x => taskDay(x) === day).sort((a, b) => (a.due_at || "") < (b.due_at || "") ? -1 : 1);
-  if (day === t) S.tasks.filter(x => isOverdue(x)).forEach(x => items.push({ key: "task:" + x.id, group: "Overdue", label: `${x.kind ? x.kind + " – " : ""}${x.dealer || x.subject}`, meta: "Was due " + fmtDate(taskDay(x)) + " " + taskTime(x), auto: isDone(x), href: taskUrl(x), cls: "over" }));
-  tasksDay.forEach(x => items.push({ key: "task:" + x.id, group: "HubSpot tasks", label: `${x.kind ? x.kind + " – " : ""}${x.dealer || x.subject}`, time: taskTime(x), auto: isDone(x), autoNote: "Done in HubSpot", href: taskUrl(x), cls: kindCls(x.kind) }));
-  const H = S.uploads.filter(r => live(r));
-  const stageItems = [["Needs Formatting", "Format the list", "b-format"], ["Data Needed", "Follow up with the dealer for data", "b-data"]];
-  stageItems.forEach(([st, verb, c]) => H.filter(r => r.source === "hubspot" && r.hubspot_in_stage !== false && stageOf(r) === st && r.status !== "Loaded")
-    .forEach(r => items.push({ key: "up:" + r.id + ":" + st, group: st, label: `${verb} – ${r.dealer}`, meta: r.list_type || "", open: r, cls: c })));
-  H.filter(r => ["Received", "Ready", "Issues"].includes(r.status) && !(r.source === "hubspot" && ["Needs Formatting", "Data Needed"].includes(stageOf(r))))
-    .forEach(r => items.push({ key: "up:" + r.id, group: "Uploads to finish", label: `Upload – ${r.dealer}`, meta: [r.list_type, stLabel(r.status)].filter(Boolean).join(" · "), open: r, cls: "b-upload" }));
-  S.uploads.filter(r => r.status === "Loaded" && r.uploaded_on === day).forEach(r => { if (!items.some(i => i.key === "up:" + r.id)) items.push({ key: "up:" + r.id, group: "Uploads to finish", label: `Upload – ${r.dealer}`, meta: r.list_type || "", auto: true, autoNote: "Uploaded", open: r, cls: "b-upload" }); });
-  S.itin.filter(x => x.day === day && x.custom).sort((a, b) => (a.created_at || "") < (b.created_at || "") ? -1 : 1).forEach(x => items.push({ key: x.item_key, group: "My items", label: x.label, custom: x }));
-  return items.map(i => { const row = S.itin.find(x => x.day === day && x.item_key === i.key); return { ...i, row, done: !!(i.auto || (row && row.done)) }; });
+const ROUTINE_DAY = "2000-01-01";
+const DEFAULT_ROUTINE = [["08:30", "☕", "Coffee + check email"], ["09:00", "📥", "Check the HubSpot queue for new lists"], ["10:00", "🧹", "Format lists in Needs Formatting"],
+  ["11:00", "⬆️", "Upload the lists that are ready"], ["12:00", "🥗", "Lunch break, step away!"], ["13:30", "📞", "Follow up with dealers in Data Needed"],
+  ["15:00", "🔁", "Check the queue again"], ["16:30", "✅", "Wrap up: update ticket stages"]];
+const EMOJIS = ["✨", "☕", "📥", "🧹", "⬆️", "📞", "📧", "🥗", "🔁", "✅", "📊", "🗂️", "💬", "🎯", "🚀", "🌟", "🧠", "💪", "🎉", "📝"];
+const CHEERS = ["Small steps add up. Let's go!", "You've got this.", "One list at a time.", "Progress over perfection.", "Clean data, happy dealers.", "Future you says thanks.", "Make today count.", "Keep it moving!"];
+const meId = () => (S.me && S.me.id) || "me";
+const isManager = () => !!(S.me && S.me.is_manager);
+const whoId = () => (isManager() && S.itUser) || meId();            // whose list is on screen
+const keyFor = (uid, k) => "u:" + uid + ":" + k;
+const uKey = k => keyFor(whoId(), k);
+const packLabel = (time, emoji, text) => `${time || ""}|${emoji || "✨"}|${text}`;
+const unpack = l => { const p = String(l || "").split("|"); return p.length >= 3 ? { time: p[0], emoji: p[1] || "✨", text: p.slice(2).join("|") } : { time: "", emoji: "✨", text: String(l || "") }; };
+const fmtClock = t => { if (!t) return ""; const [h, m] = t.split(":").map(Number); return new Date(2000, 0, 1, h, m).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }); };
+const mine = x => x.item_key && x.item_key.startsWith("u:" + whoId() + ":");
+async function ensureRoutine() {   // managers only: give a new person the starter routine
+  if (!isManager() || S.itin.some(x => x.day === ROUTINE_DAY && mine(x)) || ensureRoutine.busy) return;
+  ensureRoutine.busy = true;
+  try { for (const [t, e, x] of DEFAULT_ROUTINE) await api.itinSet(ROUTINE_DAY, uKey("r:" + crypto.randomUUID().slice(0, 8)), { label: packLabel(t, e, x), custom: true, done: false }); }
+  catch (e) { /* table missing or no rights: shown via the warning */ }
+  ensureRoutine.busy = false; renderToday();
+}
+function todayItems(day) {
+  const routine = S.itin.filter(x => x.day === ROUTINE_DAY && mine(x) && x.item_key.includes(":r:") && !x.item_key.endsWith(":done")).map(x => ({ key: x.item_key, row: x, kind: "routine", ...unpack(x.label) }));
+  const extra = S.itin.filter(x => x.day === day && mine(x) && x.item_key.includes(":x:") && !x.item_key.endsWith(":done")).map(x => ({ key: x.item_key, row: x, kind: "extra", ...unpack(x.label) }));
+  const doneSet = new Set(S.itin.filter(x => x.day === day && mine(x) && x.done && x.item_key.endsWith(":done")).map(x => x.item_key.slice(0, -5)));
+  return [...routine, ...extra].map(i => ({ ...i, done: doneSet.has(i.key) }))
+    .sort((a, b) => (a.time || "99") < (b.time || "99") ? -1 : (a.time || "99") > (b.time || "99") ? 1 : 0);
+}
+function confetti(fromEl) {
+  const r = fromEl.getBoundingClientRect(), colors = ["#3a944a", "#2e5daa", "#e8613c", "#c27610", "#8a5cc7", "#f2c94c"];
+  for (let i = 0; i < 18; i++) {
+    const p = document.createElement("i"); p.className = "confetti";
+    p.style.left = r.left + r.width / 2 + "px"; p.style.top = r.top + r.height / 2 + "px"; p.style.background = colors[i % colors.length];
+    p.style.setProperty("--dx", (Math.random() * 160 - 80) + "px"); p.style.setProperty("--dy", (Math.random() * -120 - 30) + "px"); p.style.setProperty("--r", (Math.random() * 540) + "deg");
+    document.body.append(p); setTimeout(() => p.remove(), 900);
+  }
+}
+function streak() {
+  let n = 0, d = addDays(today(), -1);
+  const routineN = S.itin.filter(x => x.day === ROUTINE_DAY && mine(x) && x.item_key.includes(":r:")).length;
+  for (let i = 0; i < 30 && routineN; i++, d = addDays(d, -1)) {
+    const g = new Date(d + "T12:00:00").getDay(); if (g === 0 || g === 6) continue;  // weekends don't break the streak
+    const done = S.itin.filter(x => x.day === d && mine(x) && x.done && x.item_key.endsWith(":done")).length; if (done >= Math.ceil(routineN * 0.8)) n++; else break;
+  }
+  return n;
 }
 function renderToday() {
   const t = today(); if (!S.itDay) S.itDay = t;
-  const day = S.itDay, items = itinItems(day), done = items.filter(i => i.done).length;
-  const dt = new Date(day + "T12:00:00");
-  $("it-date").textContent = (day === t ? "Today · " : "") + dt.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
-  $("it-progress").replaceChildren(el("div", { class: "itbar" }, el("div", { style: `width:${items.length ? done / items.length * 100 : 0}%` })), el("span", { text: items.length ? `${done} of ${items.length} done` : "Nothing scheduled" }));
+  const day = S.itDay, isToday = day === t;
+  const mgr = isManager(), other = whoId() !== meId();
+  if (mgr && S.itinReady && !S.itin.some(x => x.day === ROUTINE_DAY && mine(x))) ensureRoutine();
+  // managers pick whose list to view/edit
+  const sel = $("it-user"); sel.hidden = !mgr;
+  if (mgr) { const people = Object.values(S.profiles).sort((a, b) => (a.full_name || a.email) < (b.full_name || b.email) ? -1 : 1);
+    sel.replaceChildren(...people.map(p => { const o = el("option", { value: p.id, text: (p.full_name || p.email.split("@")[0]) + (p.id === meId() ? " (you)" : "") }); o.selected = p.id === whoId(); return o; })); }
+  const items = todayItems(day), done = items.filter(i => i.done).length, pct = items.length ? Math.round(done / items.length * 100) : 0;
+  const P = S.profiles[whoId()] || S.me || {}, hr = new Date().getHours(), first = ((P.full_name || (P.email || "").split("@")[0]) || "").split(" ")[0];
+  const greet = (hr < 12 ? "Good morning" : hr < 17 ? "Good afternoon" : "Good evening") + (first ? ", " + first.charAt(0).toUpperCase() + first.slice(1) : "") + (hr < 12 ? " ☀️" : hr < 17 ? " 🌤️" : " 🌙");
+  const dt = new Date(day + "T12:00:00"), seed = Number(day.replace(/-/g, "")) % CHEERS.length;
+  $("it-greet").textContent = other ? `${first ? first.charAt(0).toUpperCase() + first.slice(1) : "Their"}'s list` + (isToday ? "" : " · " + dt.toLocaleDateString("en-US", { weekday: "long" })) : isToday ? greet : dt.toLocaleDateString("en-US", { weekday: "long" });
+  $("it-date").textContent = dt.toLocaleDateString("en-US", { weekday: isToday ? "long" : undefined, month: "long", day: "numeric" }) + (isToday ? "" : " (" + (day < t ? "past day" : "upcoming") + ")");
+  $("it-cheer").textContent = pct === 100 && items.length ? "All done. Amazing work today! 🎉" : pct >= 50 ? "Over halfway there, keep it up! 💪" : CHEERS[seed];
+  const st = streak();
+  $("it-ring").replaceChildren(el("div", { class: "ring" + (pct === 100 ? " full" : ""), style: `--p:${pct}` }, [el("b", { text: pct + "%" }), el("span", { text: `${done} of ${items.length}` })]),
+    ...(st ? [el("div", { class: "streak", title: "Weekdays in a row with most of your routine done" }, ["🔥 ", el("b", { text: st }), " day streak"])] : []));
   $("it-warn").hidden = S.itinReady;
-  const groups = ["Overdue", "HubSpot tasks", "Needs Formatting", "Data Needed", "Uploads to finish", "My items"];
-  $("it-list").replaceChildren(...groups.map(g => {
-    const gi = items.filter(i => i.group === g); if (!gi.length && g !== "My items") return null;
-    return el("section", { class: "itgroup" }, [
-      el("h3", {}, [g, el("i", { text: gi.filter(i => i.done).length + "/" + gi.length })]),
-      ...gi.map(i => {
-        const box = el("input", { type: "checkbox", "aria-label": "Done: " + i.label });
-        box.checked = i.done; box.disabled = !!i.auto;
-        box.addEventListener("change", async () => {
-          try { await api.itinSet(day, i.key, { label: i.label, done: box.checked, done_by: box.checked && S.me ? S.me.id : null, done_at: box.checked ? new Date().toISOString() : null, ...(i.custom ? { custom: true } : {}) }); renderToday(); }
-          catch (e) { box.checked = !box.checked; toast("Couldn't save: " + (e.message || e) + (S.itinReady ? "" : " (run itinerary.sql in Supabase)")); }
-        });
-        const by = i.row && i.row.done && i.row.done_by ? name(i.row.done_by) : null;
-        return el("label", { class: "itrow " + (i.cls || "") + (i.done ? " done" : "") }, [box,
-          el("div", { class: "itmain" }, [el("div", { class: "itlabel" }, [i.time ? el("b", { text: i.time + " " }) : null, i.label]),
-            el("div", { class: "itmeta" }, [i.meta || null, i.auto ? el("span", { class: "tdone", text: i.autoNote || "Done" }) : by ? el("span", { text: "✓ " + by }) : null,
-              i.href ? el("a", { href: i.href, target: "_blank", rel: "noopener", text: "HubSpot ↗", onclick: e => e.stopPropagation() }) : null,
-              i.open ? el("button", { type: "button", class: "tlink", text: "Open", onclick: e => { e.preventDefault(); openDrawer(i.open); } }) : null,
-              i.custom ? el("button", { type: "button", class: "tlink del", text: "Remove", onclick: async e => { e.preventDefault(); try { await api.itinDel(i.custom.id); renderToday(); } catch (er) { toast("Couldn't remove: " + er.message); } } }) : null])])]);
-      }),
-      g === "My items" ? el("form", { class: "itadd", onsubmit: async e => { e.preventDefault(); const inp = e.target.querySelector("input"), v = inp.value.trim(); if (!v) return;
-          try { await api.itinSet(day, "custom:" + crypto.randomUUID(), { label: v, custom: true, done: false }); inp.value = ""; renderToday(); } catch (er) { toast("Couldn't add: " + er.message + (S.itinReady ? "" : " (run itinerary.sql in Supabase)")); } } },
-        [el("input", { type: "text", placeholder: "Add something to do today…", "aria-label": "New item" }), el("button", { class: "btn sm", type: "submit", text: "Add" })]) : null]);
+  const editing = mgr && !!S.itEdit;
+  const list = $("it-list");
+  list.replaceChildren(...items.map(i => {
+    const box = el("button", { type: "button", class: "check" + (i.done ? " on" : ""), "aria-pressed": i.done ? "true" : "false", "aria-label": (i.done ? "Undo " : "Done: ") + i.text, disabled: other ? true : null, title: other ? "Only " + (first || "they") + " can tick this off" : null });
+    box.addEventListener("click", async () => {
+      const on = !i.done;
+      try {
+        await api.itinSet(day, i.key + ":done", { done: on, custom: false, label: i.text, done_at: on ? new Date().toISOString() : null });
+        if (on) confetti(box); renderToday();
+      } catch (e) { toast("Couldn't save: " + (e.message || e)); }
+    });
+    const del = mgr && (editing || i.kind === "extra") ? el("button", { type: "button", class: "itx", title: i.kind === "routine" ? "Remove from my daily routine" : "Remove", "aria-label": "Remove " + i.text, text: "×", onclick: async () => { try { await api.itinDel(i.row.id); renderToday(); } catch (e) { toast("Couldn't remove: " + e.message); } } }) : null;
+    return el("li", { class: "itrow2" + (i.done ? " done" : "") + (i.kind === "extra" ? " extra" : "") }, [
+      el("span", { class: "ittime", text: fmtClock(i.time) || "Anytime" }),
+      el("span", { class: "itemoji", text: i.emoji, "aria-hidden": "true" }),
+      el("span", { class: "ittext" }, [i.text, i.kind === "extra" ? el("small", { text: "just today" }) : null]),
+      box, del]);
   }));
-  const n = items.filter(i => !i.done).length; $("n-today").textContent = day === t && n ? n : "";
+  if (!items.length) list.replaceChildren(el("li", { class: "empty" }, mgr ? [el("b", { text: "This list is empty" }), "Add items below, or use “Edit routine” to set the daily routine."] : [el("b", { text: "Your list isn't set up yet" }), "Your manager will add your daily routine here."]));
+  // win of the day
+  const winKey = uKey("win"), winRow = S.itin.find(x => x.day === day && x.item_key === winKey);
+  $("it-win").readOnly = other;
+  if (document.activeElement !== $("it-win")) $("it-win").value = S.itWinDraft && S.itWinDraft.day === day ? S.itWinDraft.v : winRow ? winRow.label || "" : "";
+  $("it-edit").hidden = !mgr; $("it-form").hidden = !mgr; $("it-note").textContent = mgr ? "The routine repeats every day. Use “Edit routine” to change it, or add one-off items for just this day." : "Your list is set by your manager. Tick items off as you go!";
+  $("it-edit").textContent = editing ? "Done editing" : "Edit routine";
+  $("it-addto").textContent = editing ? "Add to daily routine" : "Add to this day";
+  const left = items.filter(i => !i.done).length; $("n-today").textContent = isToday && left && !other ? left : "";
 }
-$("it-prev").addEventListener("click", () => { S.itDay = addDays(S.itDay || today(), -1); renderToday(); });
-$("it-next").addEventListener("click", () => { S.itDay = addDays(S.itDay || today(), 1); renderToday(); });
-$("it-today").addEventListener("click", () => { S.itDay = today(); renderToday(); });
+(function wireToday() {
+  const em = $("it-emoji"); EMOJIS.forEach(e => em.append(el("option", { value: e, text: e })));
+  $("it-prev").addEventListener("click", () => { S.itDay = addDays(S.itDay || today(), -1); renderToday(); });
+  $("it-next").addEventListener("click", () => { S.itDay = addDays(S.itDay || today(), 1); renderToday(); });
+  $("it-today").addEventListener("click", () => { S.itDay = today(); renderToday(); });
+  $("it-edit").addEventListener("click", () => { S.itEdit = !S.itEdit; renderToday(); });
+  $("it-user").addEventListener("change", e => { S.itUser = e.target.value; S.itWinDraft = null; store.set("du-ituser", e.target.value); renderToday(); });
+  S.itUser = store.get("du-ituser") || null;
+  $("it-form").addEventListener("submit", async e => {
+    e.preventDefault(); const text = $("it-text").value.trim(); if (!text) return $("it-text").focus();
+    const routine = !!S.itEdit, day = routine ? ROUTINE_DAY : (S.itDay || today());
+    try { await api.itinSet(day, uKey((routine ? "r:" : "x:") + crypto.randomUUID().slice(0, 8)), { label: packLabel($("it-time").value, $("it-emoji").value, text), custom: true, done: false });
+      $("it-text").value = ""; $("it-time").value = ""; renderToday(); toast(routine ? "Added to the daily routine" : "Added to this day"); }
+    catch (er) { toast("Couldn't add: " + er.message + (S.itinReady ? "" : " (run itinerary.sql in Supabase)")); }
+  });
+  let tmr; const saveWin = () => { const d = S.itWinDraft; if (!d) return; clearTimeout(tmr); api.itinSet(d.day, uKey("win"), { label: d.v, custom: false, done: false }).then(() => { if (S.itWinDraft === d) S.itWinDraft = null; }).catch(() => {}); };
+  $("it-win").addEventListener("input", e => { S.itWinDraft = { day: S.itDay || today(), v: e.target.value }; clearTimeout(tmr); tmr = setTimeout(saveWin, 600); });
+  $("it-win").addEventListener("blur", saveWin);
+})();
 
 /* =========================================================
    CALENDAR — HubSpot tasks (du_tasks), synced every 15 minutes
