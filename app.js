@@ -253,12 +253,12 @@ function renderUploads() {
   const q = S.q.toLowerCase();
   // Without a date drill-down from the chart, the table shows only lists in HubSpot's Upload Needed stage.
   let list = (S.upFilter ? S.uploads.filter(r => r.uploaded_on && r.uploaded_on >= S.upFilter.from && r.uploaded_on <= S.upFilter.to) : needList())
-    .filter(r => (!S.type || r.list_type === S.type) && (!q || [r.dealer, r.file_name, r.notes, r.hubspot_ticket_name, r.hubspot_ticket_id].join(" ").toLowerCase().includes(q)));
+    .filter(r => (!S.type || r.list_type === S.type) && (!q || [r.dealer, r.file_name, r.notes, r.hubspot_ticket_name, r.hubspot_ticket_id, (ccmOf(r) || {}).ccm].join(" ").toLowerCase().includes(q)));
   $("u-title").textContent = S.upFilter ? "Uploaded lists" : "Upload Needed"; $("u-count").textContent = list.length + (list.length === 1 ? " list" : " lists");
   const uf = $("upchip"); uf.hidden = !S.upFilter;
   if (S.upFilter) uf.replaceChildren("Uploaded " + (S.upFilter.from === S.upFilter.to ? fmtDate(S.upFilter.from) : fmtDate(S.upFilter.from) + " – " + fmtDate(S.upFilter.to)) + " ", el("button", { type: "button", "aria-label": "Clear date filter", text: "×", onclick: () => { S.upFilter = null; renderUploads(); } }));
   const { key, dir } = S.sort, order = Object.fromEntries(STATUSES.map(([s], i) => [s, i]));
-  const val = r => key === "turn" ? turn(r) : key === "status" ? order[r.status] : key === "received_on" ? refDate(r) : r[key];
+  const val = r => key === "ccm" ? (ccmOf(r) || {}).ccm : key === "turn" ? turn(r) : key === "status" ? order[r.status] : key === "received_on" ? refDate(r) : r[key];
   list.sort((a, b) => { const x = val(a), y = val(b); if (x == null && y == null) return 0; if (x == null) return 1; if (y == null) return -1; return (x < y ? -1 : x > y ? 1 : 0) * (dir === "asc" ? 1 : -1); });
   document.querySelectorAll("#p-uploads th[data-sort]").forEach(th => { th.classList.toggle("sorted", th.dataset.sort === key); th.classList.toggle("asc", th.dataset.sort === key && dir === "asc"); });
 
@@ -270,6 +270,7 @@ function renderUploads() {
     const tn = turn(r);
     return el("tr", { class: "click", onclick: () => openDrawer(r) }, [
       el("td", { class: "dealer" }, [el("b", {}, [r.dealer, r.source === "hubspot" ? (ticketHref(r) ? el("a", { class: "src", href: ticketHref(r), target: "_blank", rel: "noopener", title: "Open ticket in HubSpot", text: "HubSpot ↗", onclick: e => e.stopPropagation() }) : el("span", { class: "src", text: "HubSpot" })) : null]), r.file_name ? el("small", { text: r.file_name }) : null, r.list_url ? el("a", { class: "listlink", href: r.list_url, target: "_blank", rel: "noopener", text: "Open list ↗", onclick: e => e.stopPropagation() }) : null, ticketHref(r) ? ticketLink(r, "View ticket #" + r.hubspot_ticket_id + " ↗", "listlink tixlink") : null, r.source === "hubspot" && r.hubspot_in_stage !== false && stageOf(r) !== "Upload Needed" ? el("div", { style: "margin-top:3px" }, stagePill(r)) : null]),
+      el("td", {}, ccmChip(r) || el("span", { class: "faint", text: "–" })),
       el("td", {}, r.list_type || el("span", { class: "late", text: "Set list type" })),
       el("td", {}, st),
       el("td", {}, r.received_on ? fmtDate(r.received_on) : (r.due_on ? el("span", {}, [el("span", { class: "faint", text: "due " + fmtDate(r.due_on) + " " }), isLate(r) ? el("span", { class: "late", text: "Late" }) : null]) : el("span", { class: "faint", text: "–" }))),
@@ -384,7 +385,7 @@ async function openDrawer(r, prefill) {
   S.editing = r || null;
   const d = r || { status: "Received", received_on: today(), owner_id: S.me && S.me.id, ...prefill };
   $("d-title").textContent = r ? r.dealer : "Log upload";
-  $("f-dealer").value = d.dealer || ""; $("f-type").value = d.list_type || ""; $("f-status").value = d.status || "Received";
+  $("f-dealer").value = d.dealer || ""; S.dCcmTicket = d.hubspot_ticket_name || ""; showCcmHint(); $("f-type").value = d.list_type || ""; $("f-status").value = d.status || "Received";
   $("f-received").value = d.received_on || ""; $("f-uploaded").value = d.uploaded_on || ""; $("f-due").value = d.due_on || "";
   $("f-owner").value = d.owner_id && S.profiles[d.owner_id] ? d.owner_id : ""; $("f-rows").value = d.row_count ?? ""; $("f-issues").value = d.issue_count ?? "";
   $("f-file").value = d.file_name || ""; $("f-notes").value = d.notes || ""; $("f-link").value = d.list_url || "";
@@ -410,6 +411,11 @@ async function openDrawer(r, prefill) {
     $("d-activity").replaceChildren(el("div", { class: "ctitle", style: "margin:8px 0 0", text: "Activity" }), evs.length ? el("ul", { class: "timeline" }, evs.map(line)) : el("p", { class: "faint", text: "No activity recorded yet." }));
   }
 }
+function showCcmHint() {
+  const m = ccmFor($("f-dealer").value, S.dCcmTicket), h = $("d-ccm");
+  h.hidden = !m; if (m) h.replaceChildren(el("span", { class: "ccm big " + (CCM_CLS[m.ccm] || "") + (m.sure ? "" : " maybe"), text: "Tag CCM: " + m.ccm + (m.sure ? "" : "?") }), el("span", { class: "faint", text: (m.sure ? "" : "close match: ") + m.dealer }));
+}
+$("f-dealer").addEventListener("input", () => { S.dCcmTicket = ""; showCcmHint(); });
 function closeDrawer() { $("scrim").hidden = true; $("drawer").hidden = true; S.editing = null; }
 $("d-close").addEventListener("click", closeDrawer); $("d-cancel").addEventListener("click", closeDrawer); $("scrim").addEventListener("click", closeDrawer);
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("drawer").hidden) closeDrawer(); });
@@ -654,6 +660,43 @@ const nName = s => String(s || "").toLowerCase().replace(/&/g, "and").replace(/[
    HUBSPOT PAGE
    ========================================================= */
 /* HubSpot ticket buckets (pipeline stages the sync watches) */
+/* =========================================================================
+   CCM ASSIGNMENTS — which CCM to tag on each dealer's ticket.
+   To change: edit the names below, upload app.js to GitHub, Ctrl+F5.
+   ========================================================================= */
+const CCMS = {
+  Sierra: ["DCH Kia of Temecula", "Grainger Honda", "Honda Jonesboro", "Honda World of Conway", "Indigo Porsche Marin", "Jaguar Land Rover Rancho Mirage",
+    "Joe Machens Toyota", "Katy Honda", "Lithia Toyota of Odessa", "Lombard Toyota", "Mark McLarty Toyota", "Matt Blatt Mitsubishi", "McLarty Nissan of Benton",
+    "Ralph Hayes Toyota", "South Charlotte Hyundai", "Paragon Acura", "Porsche St Louis"],
+  Heather: ["Acura of Little Rock", "BLVD Cadillac GMC", "Gray-Daniels Nissan Brandon", "Lamborghini Houston", "Land Rover/ VW of Little Rock", "Marburger Chevy",
+    "McDonough Hyundai", "Mercedes of Little Rock", "New Smyrna CDJR", "Nyle Maxwell Supercenter CDJR", "Toyota of Newport", "Toyota of Poway", "Village Ford",
+    "Wapakoneta Ford", "Yokem Toyota", "Paragon Honda", "White Plains Honda"],
+};
+const CCM_CLS = { Sierra: "ccm-a", Heather: "ccm-b" };
+const CCM_SYN = { chevrolet: "chevy", volkswagen: "vw", saint: "st", mercedesbenz: "mercedes", benz: "", boulevard: "blvd", chrysler: "cdjr", cdjrf: "cdjr", jeep: "", dodge: "", ram: "", motors: "", auto: "", automotive: "", dealership: "", "the": "", of: "", and: "", "in": "", jlr: "jaguar land rover" };
+const ccmTokens = t => String(t || "").toLowerCase().replace(/mercedes[\s-]*benz/g, "mercedes").replace(/['’.]/g, "").replace(/[^a-z0-9]+/g, " ").trim().split(" ")
+  .flatMap(w => (w in CCM_SYN ? CCM_SYN[w] : w).split(" ")).filter(Boolean);
+const CCM_KEYS = Object.entries(CCMS).flatMap(([ccm, ds]) => ds.map(d => ({ ccm, dealer: d, toks: [...new Set(ccmTokens(d))] })));
+const ccmCache = new Map();
+function ccmFor(...names) {               // best match of a dealer / ticket name against the lists above
+  const text = names.filter(Boolean).join(" | "); if (!text) return null;
+  if (ccmCache.has(text)) return ccmCache.get(text);
+  let best = null;
+  for (const n of names.filter(Boolean)) {
+    const have = new Set(ccmTokens(n)); if (!have.size) continue;
+    for (const k of CCM_KEYS) {
+      const hit = k.toks.filter(t => have.has(t)).length, score = hit / k.toks.length;
+      const full = score === 1;                                                            // every word of the dealer on the list
+      const part = hit >= 2 && ([...have].every(t => k.toks.includes(t)) || score >= 0.75);  // close, but double-check
+      const sc = full ? 1 + hit / 100 : part ? score : 0;
+      if (sc && (!best || sc > best.sc)) best = { ...k, sc, sure: full };
+    }
+  }
+  const res = best ? { ccm: best.ccm, dealer: best.dealer, sure: best.sure } : null; ccmCache.set(text, res); return res;
+}
+const ccmOf = r => ccmFor(r.dealer, r.hubspot_ticket_name);
+const ccmChip = r => { const m = ccmOf(r); return m ? el("span", { class: "ccm " + (CCM_CLS[m.ccm] || "") + (m.sure ? "" : " maybe"), title: (m.sure ? "Tag " : "Probably ") + m.ccm + " — matched “" + m.dealer + "”" + (m.sure ? "" : ". Double-check the dealer name."), text: m.ccm + (m.sure ? "" : "?") }) : null; };
+
 const HS_STAGES = [["Data Needed", "b-data", "Waiting on the dealer for data"], ["Needs Formatting", "b-format", "List came in but needs cleaning up"], ["Upload Needed", "b-upload", "Ready to be uploaded"]];
 const stageOf = r => { const k = String(r.hubspot_stage || "").toLowerCase().replace(/[^a-z]/g, ""); const m = HS_STAGES.find(([n]) => n.toLowerCase().replace(/[^a-z]/g, "") === k); return m ? m[0] : (r.hubspot_stage || "Upload Needed"); };
 const stageCls = n => (HS_STAGES.find(x => x[0] === n) || [, "b-other"])[1];
@@ -680,7 +723,7 @@ function renderHubspot() {
     const st = el("select", { class: "st st-" + r.status, "aria-label": "Status for " + r.dealer, onclick: e => e.stopPropagation() }, STATUSES.map(([v, l]) => { const o = el("option", { value: v, text: l }); o.selected = v === r.status; return o; }));
     st.addEventListener("change", () => quickStatus(r, st.value));
     return el("tr", { class: "click", onclick: () => openDrawer(r) }, [
-      el("td", { class: "dealer" }, [el("b", {}, tk), el("small", { text: "#" + r.hubspot_ticket_id })]), el("td", { text: r.dealer }),
+      el("td", { class: "dealer" }, [el("b", {}, tk), el("small", { text: "#" + r.hubspot_ticket_id })]), el("td", { text: r.dealer }), el("td", {}, ccmChip(r) || el("span", { class: "faint", text: "–" })),
       el("td", {}, stagePill(r)),
       el("td", {}, a == null ? "–" : el("span", { class: a > 7 ? "late" : "", text: a === 0 ? "Today" : a + (a === 1 ? " day" : " days") })),
       el("td", {}, r.list_url ? el("a", { class: "listlink", href: r.list_url, target: "_blank", rel: "noopener", text: "Open list ↗", onclick: e => e.stopPropagation() }) : el("span", { class: "faint", text: "No link yet" })), el("td", {}, st),

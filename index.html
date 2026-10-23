@@ -7,7 +7,7 @@
 <link rel="icon" href="logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@500;600;700;800&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@500&display=swap">
-<link rel="stylesheet" href="styles.css?v=20261022i">
+<link rel="stylesheet" href="styles.css?v=20261023a">
 </head>
 <body>
 
@@ -82,7 +82,7 @@
         </div>
         <div class="table-wrap"><table class="tbl">
           <thead><tr>
-            <th data-sort="dealer">Dealer</th><th data-sort="list_type">List type</th><th data-sort="status">Status</th>
+            <th data-sort="dealer">Dealer</th><th data-sort="ccm">CCM</th><th data-sort="list_type">List type</th><th data-sort="status">Status</th>
             <th data-sort="received_on">Came in</th><th data-sort="uploaded_on">Uploaded</th><th data-sort="turn" class="num">Turnaround</th>
             <th data-sort="row_count" class="num">Rows</th><th data-sort="issue_count" class="num">Issues</th><th>Owner</th>
           </tr></thead>
@@ -158,7 +158,7 @@
       <div class="card flush">
         <div class="tbar"><div class="seg buckets" id="hs-seg" role="tablist" aria-label="HubSpot stage"></div></div>
         <div class="table-wrap"><table class="tbl">
-          <thead><tr><th>Ticket</th><th>Dealer</th><th>HubSpot stage</th><th>Ticket age</th><th>List</th><th>Tracker status</th><th>Came in</th><th>Uploaded</th></tr></thead>
+          <thead><tr><th>Ticket</th><th>Dealer</th><th>CCM</th><th>HubSpot stage</th><th>Ticket age</th><th>List</th><th>Tracker status</th><th>Came in</th><th>Uploaded</th></tr></thead>
           <tbody id="hs-rows"></tbody>
         </table></div>
         <div class="empty" id="hs-empty" hidden></div>
@@ -231,6 +231,7 @@
   <form id="dform" class="dbody" autocomplete="off">
     <div class="hsnote" id="d-hs" hidden></div>
     <label class="fld"><span>Dealer</span><input id="f-dealer" required list="dealers"></label>
+    <div class="ccmhint" id="d-ccm" hidden></div>
     <div class="two">
       <label class="fld"><span>List type</span><select id="f-type"><option value="">Choose…</option></select></label>
       <label class="fld"><span>Status</span><select id="f-status"></select></label>
@@ -266,6 +267,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js?v=20261015b"></script>
 <script src="rules.js?v=20261022b"></script>
-<script src="app.js?v=20261022j"></script>
+<script src="app.js?v=20261023a"></script>
 </body>
 </html>
