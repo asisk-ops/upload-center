@@ -620,6 +620,19 @@ function pullRow(t, showDay) {
       m ? el("span", { class: "ccm " + (CCM_CLS[m.ccm] || "") + (m.sure ? "" : " maybe"), title: "CCM: " + m.ccm, text: m.ccm + (m.sure ? "" : "?") }) : null,
       open ? el("button", { type: "button", class: "tlink", text: "Open upload", onclick: () => openDrawer(open) }) : null])]);
 }
+/* Which days each pull covers. Change here if the schedule changes.
+   Missed  = appointments that were missed on these days (Monday covers Friday + Saturday).
+   Confirm = appointments on these upcoming days (Friday covers Saturday + Monday).          */
+const PULL_PLAN = {
+  1: { missed: [-3, -2], conf: [1] },        // Monday
+  2: { missed: [-1], conf: [1] },            // Tuesday
+  3: { missed: [-1], conf: [1] },            // Wednesday
+  4: { missed: [-1], conf: [1] },            // Thursday
+  5: { missed: [-1], conf: [1, 3] },         // Friday
+};
+const longDay = d => new Date(d + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
+const joinDays = ds => ds.map(longDay).join(" and ");
+function pullPlan(day) { const p = PULL_PLAN[new Date(day + "T12:00:00").getDay()]; return p ? { missed: p.missed.map(n => addDays(day, n)), conf: p.conf.map(n => addDays(day, n)) } : null; }
 function pullCheck(t, done) {
   const c = dashCheck(t), byHs = hsDone(t);
   const tip = byHs ? "Completed in HubSpot" : done ? "Pulled" + (c.done_by ? " by " + name(c.done_by) : "") + (c.done_at ? " at " + new Date(c.done_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: TZ }) : "") + " — click to undo" : "Mark as pulled";
@@ -631,13 +644,14 @@ function pullCheck(t, done) {
   });
   return b;
 }
-function pullGroups(list, showDay) {
+function pullGroups(list, showDay, plan) {
   const by = {}; list.forEach(x => { const k = kindName(x.kind); (by[k] = by[k] || []).push(x); });
   return Object.keys(by).sort((a, b) => kindRank(a) - kindRank(b) || a.localeCompare(b)).map(k => {
     const items = by[k].sort((a, b) => isDone(a) - isDone(b) || (a.dealer || "").localeCompare(b.dealer || ""));
     const left = items.filter(x => !isDone(x)).length;
     return el("section", { class: "pgroup " + kindCls(k) }, [
-      el("h3", {}, [el("i", { class: "dot" }), k, el("span", { class: "faint", text: left === items.length ? String(items.length) : left + " of " + items.length + " left" })]),
+      el("h3", {}, [el("i", { class: "dot" }), k, plan && k === "Missed" ? el("span", { class: "pfor", text: "from " + joinDays(plan.missed) }) : plan && k === "Appt Conf" ? el("span", { class: "pfor", text: "for " + joinDays(plan.conf) }) : null,
+        el("span", { class: "faint", text: left === items.length ? String(items.length) : left + " of " + items.length + " left" })]),
       el("ul", { class: "plist" }, items.map(x => pullRow(x, showDay)))]);
   });
 }
@@ -646,14 +660,18 @@ function renderCalendar() {
   const d = S.cal.anchor, all = S.tasks;
   const dayList = all.filter(x => taskDay(x) === d);
   const carried = d === t ? all.filter(x => isOverdue(x)) : [];   // still open from earlier days
-  const dt = new Date(d + "T12:00:00");
+  const dt = new Date(d + "T12:00:00"), plan = pullPlan(d);
   $("cal-range").textContent = (d === t ? "Today · " : "") + dt.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
   const left = dayList.filter(x => !isDone(x)).length;
   $("cal-count").textContent = dayList.length ? (left ? left + " of " + dayList.length + " lists left to pull" : "All " + dayList.length + " lists pulled 🎉") : "";
   $("cal-count").className = "pullcount" + (dayList.length && !left ? " good" : "");
   const box = $("cal-grid");
   box.replaceChildren(
-    ...(dayList.length ? pullGroups(dayList, false) : [el("p", { class: "pnone", text: all.length ? "No lists to pull on this day." : "" })]),
+    plan ? el("div", { class: "pplan" }, [
+      el("p", { class: "pplanh", text: dt.toLocaleDateString("en-US", { weekday: "long" }) + "’s pulls" }),
+      el("div", { class: "pline k-missed" }, [el("i", { class: "dot" }), el("span", {}, ["Pull ", el("b", { text: "Missed" }), " from ", el("b", { text: joinDays(plan.missed) })])]),
+      el("div", { class: "pline k-appt" }, [el("i", { class: "dot" }), el("span", {}, ["Pull ", el("b", { text: "Confirmed" }), " for ", el("b", { text: joinDays(plan.conf) })])])]) : null,
+    ...(dayList.length ? pullGroups(dayList, false, plan) : [el("p", { class: "pnone", text: all.length ? (plan ? "No HubSpot tasks for this day yet." : "No pulls on weekends.") : "" })]),
     ...(carried.length ? [el("div", { class: "pcarry" }, [el("h3", { class: "pcarryh" }, ["Still open from earlier days ", el("span", { class: "faint", text: String(carried.length) })]), ...pullGroups(carried, true)])] : []));
   const E = $("cal-empty"); E.hidden = all.length > 0;
   if (!all.length) E.replaceChildren(el("b", { text: "No tasks synced yet" }), "Once the sync runs, HubSpot “Pull List” tasks show up here every 15 minutes.");

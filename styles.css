@@ -419,3 +419,9 @@ button.pmark:hover:not([disabled]){transform:scale(1.1);background:color-mix(in 
 .pull.done button.pmark{background:var(--kc)}
 button.pmark[disabled]{cursor:default}
 .pmeta .tdone{margin-left:0}
+.pplan{margin-top:14px;padding:14px 16px;border-radius:10px;background:color-mix(in srgb,var(--blue) 7%,var(--card));border:1px solid var(--line);display:grid;gap:8px}
+.pplanh{margin:0;font:700 12px var(--body);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.pline{display:flex;align-items:center;gap:10px;font-size:16px;color:var(--ink)}
+.pline .dot{width:10px;height:10px;border-radius:50%;background:var(--kc);flex:none}
+.pline b{font-weight:800}
+.pgroup h3 .pfor{font-weight:600;letter-spacing:0;text-transform:none;color:var(--ink)}
