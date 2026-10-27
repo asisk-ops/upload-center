@@ -64,6 +64,8 @@ const api = LIVE ? {
     S.uploads = u.data; S.profiles = Object.fromEntries((p.data || []).map(x => [x.id, x])); S.sync = (s.data || [])[0] || null;
     const tk = await sb.from("du_tasks").select("*").order("due_at");  // table may not exist yet
     S.tasks = tk.error ? [] : tk.data;
+    const td = await sb.from("du_task_checks").select("*");  // check marks made on the dashboard
+    S.taskDone = Object.fromEntries((td.error ? [] : td.data).map(x => [x.task_id, x])); S.taskChecksReady = !td.error;
     const it = await sb.from("du_itinerary").select("*").or(`day.gte.${addDays(today(), -30)},day.eq.2000-01-01`);  // recent days + everyone's routine template
     S.itin = it.error ? [] : it.data; S.itinReady = !it.error;
   },
@@ -83,6 +85,9 @@ const api = LIVE ? {
         if (eventType !== "DELETE") S.tasks.push(n);
         S.tasks.sort((a, b) => (a.due_at || "") < (b.due_at || "") ? -1 : 1); onChange();
       })
+      .on("postgres_changes", { event: "*", schema: "public", table: "du_task_checks" }, ({ eventType, new: n, old: o }) => {
+        if (eventType === "DELETE") delete S.taskDone[o.task_id]; else S.taskDone[n.task_id] = n; onChange();
+      })
       .on("postgres_changes", { event: "*", schema: "public", table: "du_sync_runs" }, ({ new: n }) => { if (n && (!S.sync || n.id >= S.sync.id)) { S.sync = n; onChange(); } })
       .subscribe();
   },
@@ -96,6 +101,10 @@ const api = LIVE ? {
     if (error) throw error; S.itin = S.itin.filter(x => !(x.day === day && x.item_key === key)); S.itin.push(data); return data;
   },
   async itinDel(id) { const { error } = await sb.from("du_itinerary").delete().eq("id", id); if (error) throw error; S.itin = S.itin.filter(x => x.id !== id); },
+  async taskCheck(id, on) {
+    const { data, error } = await sb.from("du_task_checks").upsert({ task_id: id, done: on, done_by: on ? meId() : null, done_at: on ? new Date().toISOString() : null }, { onConflict: "task_id" }).select().single();
+    if (error) throw error; S.taskDone[id] = data; return data;
+  },
   async reloadItin() { const it = await sb.from("du_itinerary").select("*").or(`day.gte.${addDays(today(), -30)},day.eq.2000-01-01`); if (!it.error) { S.itin = it.data; S.itinReady = true; } },
   async hasRoutine(uid) { const { count, error } = await sb.from("du_itinerary").select("id", { count: "exact", head: true }).eq("day", "2000-01-01").like("item_key", "u:" + uid + ":r:%"); return !!error || count > 0; }
 } : demoApi();
@@ -119,7 +128,7 @@ function demoApi() {
     mk("Example Acura", "Recalls", "Received", -1, null, { source: "hubspot", hubspot_ticket_id: "1003", hubspot_ticket_name: "Example Acura – recall list", hubspot_owner: "Alyssa (demo)", hubspot_created_at: addDays(t, -3) + "T15:00:00Z", hubspot_in_stage: true, hubspot_stage: "Upload Needed", row_count: 430 })];
   return {
     async load() {
-      S.tasks = demoTasks();
+      S.tasks = demoTasks(); S.taskDone = {}; S.taskChecksReady = true;
       S.uploads = rows; S.profiles = Object.fromEntries(people.map(([id, email, full_name]) => [id, { id, email, full_name, is_manager: id === "d1" }])); S.me = S.profiles.d1; S.sync = { started_at: new Date(Date.now() - 6 * 6e4).toISOString(), finished_at: new Date().toISOString(), found: 3, created: 0 }; },
     subscribe() {},
     async insert(b) { const r = { id: crypto.randomUUID(), created_at: new Date().toISOString(), source: "manual", ...b }; rows.unshift(r); (ev[r.id] = ev[r.id] || []).unshift({ action: "created", actor_id: "d1", created_at: r.created_at, detail: {} }); return r; },
@@ -130,6 +139,7 @@ function demoApi() {
     async itinSet(day, key, patch) { let x = S.itin.find(i => i.day === day && i.item_key === key); if (!x) { x = { id: crypto.randomUUID(), day, item_key: key, created_at: new Date().toISOString() }; S.itin.push(x); } Object.assign(x, patch); return x; },
     async itinDel(id) { S.itin = S.itin.filter(x => x.id !== id); },
     async reloadItin() {},
+    async taskCheck(id, on) { S.taskDone[id] = { task_id: id, done: on, done_by: on ? "d1" : null, done_at: on ? new Date().toISOString() : null }; },
     async hasRoutine(uid) { return S.itin.some(x => x.day === "2000-01-01" && x.item_key.startsWith("u:" + uid + ":r:")); }
   };
 }
@@ -587,72 +597,72 @@ function demoTasks() {
 const dayKey = d => iso(d);
 const taskDay = t => t.due_at ? dayKey(new Date(t.due_at)) : null;
 const taskTime = t => t.due_at ? new Date(t.due_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "";
-const isDone = t => /^COMPLETED$/i.test(t.status || "");
+const hsDone = t => /^COMPLETED$/i.test(t.status || "");
+const dashCheck = t => (S.taskDone || {})[t.id];
+const isDone = t => hsDone(t) || !!(dashCheck(t) && dashCheck(t).done);
 const isOverdue = t => !isDone(t) && t.due_at && new Date(t.due_at) < new Date() && taskDay(t) < today();
 const kindCls = k => /miss/i.test(k || "") ? "k-missed" : /appt|conf/i.test(k || "") ? "k-appt" : "k-other";
 const taskUrl = t => C.HUBSPOT_PORTAL_ID && /^\d+$/.test(t.id) ? `https://${C.HUBSPOT_HOST || "app.hubspot.com"}/tasks/${C.HUBSPOT_PORTAL_ID}/view/all/task/${t.id}` : null;
 function weekStart(dStr) { const d = new Date(dStr + "T12:00:00"); return addDays(dStr, -((d.getDay() + 6) % 7)); }
-function calTasks() { return S.tasks.filter(t => (S.cal.done || !isDone(t)) && (!S.cal.kind || (t.kind || "Other") === S.cal.kind)); }
-function taskCard(t, compact) {
-  const url = taskUrl(t), open = S.uploads.find(u => live(u) && u.status !== "Loaded" && nName(u.dealer) === nName(t.dealer));
-  const cls = "tcard " + kindCls(t.kind) + (isDone(t) ? " done" : "") + (isOverdue(t) ? " over" : "");
-  const kids = compact
-    ? [el("b", { text: taskTime(t) }), " ", t.dealer || t.subject]
-    : [el("div", { class: "trow" }, [el("b", { text: taskTime(t) }), el("span", { class: "tkind", text: t.kind || "Task" }), isDone(t) ? el("span", { class: "tdone", text: "Done" }) : isOverdue(t) ? el("span", { class: "tlate", text: "Overdue" }) : null]),
-       el("div", { class: "tdealer", text: t.dealer || t.subject }),
-       t.owner || open ? el("div", { class: "tmeta" }, [t.owner ? t.owner : null, open ? el("button", { type: "button", class: "tlink", text: "Open upload", onclick: e => { e.preventDefault(); e.stopPropagation(); openDrawer(open); } }) : null]) : null];
-  return el(url ? "a" : "div", { class: cls, href: url, target: url ? "_blank" : null, rel: url ? "noopener" : null, title: t.subject + (url ? " — open in HubSpot" : "") }, kids);
+const KIND_ORDER = ["Missed", "Appt Conf"];
+const kindName = k => /conf/i.test(k || "") ? "Appt Conf" : /miss/i.test(k || "") ? "Missed" : (k || "Other");   // "Conf" and "Appt Conf" are the same list
+const kindRank = k => { const i = KIND_ORDER.indexOf(k); return i < 0 ? 99 : i; };
+function pullRow(t, showDay) {
+  const url = taskUrl(t), done = isDone(t), late = isOverdue(t);
+  const open = S.uploads.find(u => live(u) && u.status !== "Loaded" && nName(u.dealer) === nName(t.dealer));
+  const m = ccmFor(t.dealer, t.subject);
+  return el("li", { class: "pull " + kindCls(t.kind) + (done ? " done" : "") + (late ? " over" : "") }, [
+    pullCheck(t, done),
+    el(url ? "a" : "span", { class: "pdealer", href: url, target: url ? "_blank" : null, rel: url ? "noopener" : null, title: t.subject + (url ? " — open in HubSpot" : "") }, [t.dealer || t.subject, url ? el("span", { class: "parrow", text: " ↗" }) : null]),
+    el("span", { class: "pmeta" }, [
+      showDay ? el("span", { class: "tlate", text: "Due " + fmtDate(taskDay(t)) }) : null,
+      done ? el("span", { class: "tdone", text: hsDone(t) ? "Done in HubSpot" : "Pulled" + (dashCheck(t).done_at ? " " + new Date(dashCheck(t).done_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: TZ }) : "") }) : null,
+      m ? el("span", { class: "ccm " + (CCM_CLS[m.ccm] || "") + (m.sure ? "" : " maybe"), title: "CCM: " + m.ccm, text: m.ccm + (m.sure ? "" : "?") }) : null,
+      open ? el("button", { type: "button", class: "tlink", text: "Open upload", onclick: () => openDrawer(open) }) : null])]);
+}
+function pullCheck(t, done) {
+  const c = dashCheck(t), byHs = hsDone(t);
+  const tip = byHs ? "Completed in HubSpot" : done ? "Pulled" + (c.done_by ? " by " + name(c.done_by) : "") + (c.done_at ? " at " + new Date(c.done_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: TZ }) : "") + " — click to undo" : "Mark as pulled";
+  const b = el("button", { type: "button", class: "pmark", "aria-pressed": done ? "true" : "false", "aria-label": (done ? "Undo: " : "Mark pulled: ") + (t.dealer || t.subject), title: tip, disabled: byHs ? true : null, text: done ? "✓" : "" });
+  b.addEventListener("click", async () => {
+    if (!S.taskChecksReady) return toast("Run task-checks.sql in Supabase first");
+    try { await api.taskCheck(t.id, !done); if (!done) confetti(b); renderCalendar(); }
+    catch (e) { toast("Couldn't save: " + (e.message || e)); }
+  });
+  return b;
+}
+function pullGroups(list, showDay) {
+  const by = {}; list.forEach(x => { const k = kindName(x.kind); (by[k] = by[k] || []).push(x); });
+  return Object.keys(by).sort((a, b) => kindRank(a) - kindRank(b) || a.localeCompare(b)).map(k => {
+    const items = by[k].sort((a, b) => isDone(a) - isDone(b) || (a.dealer || "").localeCompare(b.dealer || ""));
+    const left = items.filter(x => !isDone(x)).length;
+    return el("section", { class: "pgroup " + kindCls(k) }, [
+      el("h3", {}, [el("i", { class: "dot" }), k, el("span", { class: "faint", text: left === items.length ? String(items.length) : left + " of " + items.length + " left" })]),
+      el("ul", { class: "plist" }, items.map(x => pullRow(x, showDay)))]);
+  });
 }
 function renderCalendar() {
   const t = today(); if (!S.cal.anchor) S.cal.anchor = t;
-  const all = S.tasks, open = all.filter(x => !isDone(x));
-  const wk0 = weekStart(t), wk1 = addDays(wk0, 6);
-  const inWeek = x => { const d = taskDay(x); return d >= wk0 && d <= wk1; };
-  $("cal-kpis").replaceChildren(
-    kpi("", "Due today", open.filter(x => taskDay(x) === t).length, "Open tasks for today", () => { S.cal.view = "week"; S.cal.anchor = t; renderCalendar(); }),
-    kpi(open.some(isOverdue) ? "bad" : "", "Overdue", open.filter(isOverdue).length, "Past due and not done"),
-    kpi("", "This week", all.filter(inWeek).length, "Tasks Mon–Sun"),
-    kpi("good", "Done this week", all.filter(x => inWeek(x) && isDone(x)).length, "Completed in HubSpot"));
-  // kind filter
-  const kinds = [...new Set(all.map(x => x.kind || "Other"))].sort();
-  $("cal-kinds").replaceChildren(...[["", "All"], ...kinds.map(k => [k, k])].map(([v, l]) => el("button", { class: (S.cal.kind === v ? "on " : "") + (v ? kindCls(v) : ""), onclick: () => { S.cal.kind = v; renderCalendar(); } }, [v ? el("i", { class: "dot" }) : null, l, el("i", { text: v ? all.filter(x => (x.kind || "Other") === v).length : all.length })])));
-  document.querySelectorAll("#cal-view button").forEach(b => b.classList.toggle("on", b.dataset.v === S.cal.view));
-  $("cal-done").checked = S.cal.done;
-  const list = calTasks(), byDay = {}; list.forEach(x => { const d = taskDay(x); (byDay[d] = byDay[d] || []).push(x); });
-  const box = $("cal-grid"); box.className = "cal " + S.cal.view;
-  const dayHead = d => { const dt = new Date(d + "T12:00:00"); return [el("span", { class: "dname", text: dt.toLocaleDateString("en-US", { weekday: "short" }) }), el("span", { class: "dnum" + (d === t ? " today" : ""), text: dt.getDate() })]; };
-  if (S.cal.view === "week") {
-    const s0 = weekStart(S.cal.anchor), daysArr = Array.from({ length: 7 }, (_, i) => addDays(s0, i));
-    $("cal-range").textContent = fmtDate(s0) + " – " + fmtDate(daysArr[6]);
-    box.replaceChildren(...daysArr.map(d => {
-      const items = byDay[d] || [], g = new Date(d + "T12:00:00").getDay();
-      return el("section", { class: "cday" + (d === t ? " is-today" : "") + (g === 0 || g === 6 ? " wkend" : "") + (d < t ? " past" : "") }, [
-        el("header", {}, [...dayHead(d), items.length ? el("em", { text: items.length }) : null]),
-        el("div", { class: "citems" }, items.length ? items.map(x => taskCard(x)) : [el("p", { class: "cnone", text: g === 0 || g === 6 ? "" : "No tasks" })])]);
-    }));
-  } else {
-    const a = new Date(S.cal.anchor + "T12:00:00"), first = iso(new Date(a.getFullYear(), a.getMonth(), 1)), start = weekStart(first);
-    $("cal-range").textContent = a.toLocaleDateString("en-US", { month: "long", year: "numeric" });
-    const cells = Array.from({ length: 42 }, (_, i) => addDays(start, i));
-    const heads = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(n => el("div", { class: "mhead", text: n }));
-    box.replaceChildren(...heads, ...cells.map(d => {
-      const items = byDay[d] || [], other = d.slice(0, 7) !== first.slice(0, 7);
-      return el("section", { class: "mcell" + (other ? " other" : "") + (d === t ? " is-today" : ""), onclick: () => { S.cal.view = "week"; S.cal.anchor = d; store.set("du-calview", "week"); renderCalendar(); } }, [
-        el("span", { class: "dnum" + (d === t ? " today" : ""), text: new Date(d + "T12:00:00").getDate() }),
-        ...items.slice(0, 3).map(x => taskCard(x, true)),
-        items.length > 3 ? el("span", { class: "more", text: "+" + (items.length - 3) + " more" }) : null]);
-    }));
-  }
+  const d = S.cal.anchor, all = S.tasks;
+  const dayList = all.filter(x => taskDay(x) === d);
+  const carried = d === t ? all.filter(x => isOverdue(x)) : [];   // still open from earlier days
+  const dt = new Date(d + "T12:00:00");
+  $("cal-range").textContent = (d === t ? "Today · " : "") + dt.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
+  const left = dayList.filter(x => !isDone(x)).length;
+  $("cal-count").textContent = dayList.length ? (left ? left + " of " + dayList.length + " lists left to pull" : "All " + dayList.length + " lists pulled 🎉") : "";
+  $("cal-count").className = "pullcount" + (dayList.length && !left ? " good" : "");
+  const box = $("cal-grid");
+  box.replaceChildren(
+    ...(dayList.length ? pullGroups(dayList, false) : [el("p", { class: "pnone", text: all.length ? "No lists to pull on this day." : "" })]),
+    ...(carried.length ? [el("div", { class: "pcarry" }, [el("h3", { class: "pcarryh" }, ["Still open from earlier days ", el("span", { class: "faint", text: String(carried.length) })]), ...pullGroups(carried, true)])] : []));
   const E = $("cal-empty"); E.hidden = all.length > 0;
-  if (!all.length) E.replaceChildren(el("b", { text: "No tasks synced yet" }), "Once the sync is updated (see setup), HubSpot “Pull List” tasks show up here every 15 minutes.");
+  if (!all.length) E.replaceChildren(el("b", { text: "No tasks synced yet" }), "Once the sync runs, HubSpot “Pull List” tasks show up here every 15 minutes.");
   const s = S.sync; $("cal-info").textContent = s ? "Synced " + ago(s.finished_at || s.started_at) : "";
 }
-function calMove(dir) { const a = S.cal.anchor || today(); if (S.cal.view === "week") S.cal.anchor = addDays(a, 7 * dir); else { const d = new Date(a + "T12:00:00"); S.cal.anchor = iso(new Date(d.getFullYear(), d.getMonth() + dir, 1)); } renderCalendar(); }
+function calMove(dir) { let a = addDays(S.cal.anchor || today(), dir); const g = new Date(a + "T12:00:00").getDay(); if (g === 0 || g === 6) a = addDays(a, dir > 0 ? (g === 6 ? 2 : 1) : (g === 0 ? -2 : -1)); S.cal.anchor = a; renderCalendar(); }
 $("cal-prev").addEventListener("click", () => calMove(-1));
 $("cal-next").addEventListener("click", () => calMove(1));
 $("cal-today").addEventListener("click", () => { S.cal.anchor = today(); renderCalendar(); });
-document.querySelectorAll("#cal-view button").forEach(b => b.addEventListener("click", () => { S.cal.view = b.dataset.v; store.set("du-calview", S.cal.view); renderCalendar(); }));
-$("cal-done").addEventListener("change", e => { S.cal.done = e.target.checked; store.set("du-caldone", e.target.checked ? "1" : "0"); renderCalendar(); });
 
 const nName = s => String(s || "").toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]/g, "");
 
