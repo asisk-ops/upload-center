@@ -630,6 +630,9 @@ const PULL_PLAN = {
   4: { missed: [-1], conf: [1] },            // Thursday
   5: { missed: [-1], conf: [1, 3] },         // Friday
 };
+// Dealers to leave off the Daily pulls page (any HubSpot task whose dealer contains all these words)
+const HIDE_PULLS = ["Ralph Hayes"];
+const hiddenPull = t => { const have = new Set(ccmTokens(t.dealer + " " + (t.subject || ""))); return HIDE_PULLS.some(h => ccmTokens(h).every(w => have.has(w))); };
 const longDay = d => new Date(d + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
 const joinDays = ds => ds.map(longDay).join(" and ");
 function pullPlan(day) { const p = PULL_PLAN[new Date(day + "T12:00:00").getDay()]; return p ? { missed: p.missed.map(n => addDays(day, n)), conf: p.conf.map(n => addDays(day, n)) } : null; }
@@ -657,7 +660,7 @@ function pullGroups(list, showDay, plan) {
 }
 function renderCalendar() {
   const t = today(); if (!S.cal.anchor) S.cal.anchor = t;
-  const d = S.cal.anchor, all = S.tasks;
+  const d = S.cal.anchor, all = S.tasks.filter(x => !hiddenPull(x));
   const dayList = all.filter(x => taskDay(x) === d);
   const carried = d === t ? all.filter(x => isOverdue(x)) : [];   // still open from earlier days
   const dt = new Date(d + "T12:00:00"), plan = pullPlan(d);
