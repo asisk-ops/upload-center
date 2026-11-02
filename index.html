@@ -6,8 +6,8 @@
 <title>CallSource Data Upload Center</title>
 <link rel="icon" href="logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@500;600;700;800&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@500&display=swap">
-<link rel="stylesheet" href="styles.css?v=20261102b">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@500;600;700;800&family=Dancing+Script:wght@700&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@500&display=swap">
+<link rel="stylesheet" href="styles.css?v=20261102d">
 </head>
 <body>
 
@@ -36,18 +36,12 @@
     <nav class="nav" id="nav">
       <button data-page="uploads" class="active"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 4h14M3 10h14M3 16h9"/></svg>Uploads<em id="n-open"></em></button>
       <button data-page="today"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 5l2 2 3-3M4 11l2 2 3-3M11 6h6M11 12h6M4 17h13"/></svg>Today<em id="n-today"></em></button>
+      <button data-page="prio"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 17s-6-3.6-6-8.2A3.3 3.3 0 0 1 10 6.6a3.3 3.3 0 0 1 6 2.2C16 13.4 10 17 10 17z"/></svg>Priorities<em id="n-prio"></em></button>
       <button data-page="hubspot"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="3"/><path d="M10 2v5M10 13v5M2 10h5M13 10h5"/></svg>HubSpot queue<em id="n-hs"></em></button>
       <button data-page="calendar"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5h14v12H3zM3 9h14M7 3v4M13 3v4"/></svg>Daily pulls</button>
       <button data-page="checker"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10l4 4 8-9"/></svg>File checker</button>
       <button data-page="template"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 2h7l4 4v12H5zM12 2v4h4"/></svg>Template</button>
     </nav>
-    <section class="prio" id="prio" aria-label="Priorities">
-      <header><h2>Priorities</h2><span id="prio-upd"></span><button type="button" class="prio-edit" id="prio-edit" hidden>Edit</button></header>
-      <ol id="prio-list"></ol>
-      <p class="prio-empty" id="prio-empty" hidden></p>
-      <form id="prio-form" hidden autocomplete="off"><input id="prio-new" placeholder="Add a priority…" aria-label="New priority" maxlength="160"><button type="submit">Add</button></form>
-      <button type="button" class="prio-clear" id="prio-clear" hidden>Clear done items</button>
-    </section>
     <div class="side-foot">
       <div class="me" id="me"></div>
       <button class="link light" id="signout">Sign out</button>
@@ -120,6 +114,34 @@
       </div>
     </section>
 
+
+    <section class="page girly" id="p-prio" hidden>
+      <div class="ghero">
+        <div class="ghero-text">
+          <p class="gkick">✿ today’s focus ✿</p>
+          <h1 class="gtitle">Priorities</h1>
+          <p class="gsub" id="prio-upd"></p>
+        </div>
+        <div class="gring" id="prio-ring"><div><b id="prio-pct">0</b><span>done</span></div></div>
+        <p class="gcheer" id="prio-cheer"></p>
+      </div>
+      <form class="gadd" id="prio-form" autocomplete="off" hidden>
+        <input id="prio-new" placeholder="Add a priority…" aria-label="New priority" maxlength="200">
+        <button type="button" class="gurg" id="prio-urg" aria-pressed="false">♥ Urgent</button>
+        <button type="submit" class="gbtn">Add</button>
+      </form>
+      <div class="gcols">
+        <div class="gcard gcard-urgent">
+          <h2><span class="gdot"></span>Urgent <em id="prio-un"></em></h2>
+          <ul class="glist" id="prio-urgent"></ul>
+        </div>
+        <div class="gcard gcard-later">
+          <h2><span class="gdot"></span>Not urgent <em id="prio-ln"></em></h2>
+          <ul class="glist" id="prio-later"></ul>
+        </div>
+      </div>
+      <button type="button" class="gclear" id="prio-clear" hidden>Clear done items</button>
+    </section>
 
     <section class="page" id="p-today" hidden>
       <div class="ithero">
@@ -269,6 +291,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js?v=20261015b"></script>
 <script src="rules.js?v=20261022b"></script>
-<script src="app.js?v=20261102b"></script>
+<script src="app.js?v=20261102d"></script>
 </body>
 </html>

@@ -106,7 +106,7 @@ const api = LIVE ? {
     if (error) throw error; S.itin = S.itin.filter(x => !(x.day === day && x.item_key === key)); S.itin.push(data); return data;
   },
   async itinDel(id) { const { error } = await sb.from("du_itinerary").delete().eq("id", id); if (error) throw error; S.itin = S.itin.filter(x => x.id !== id); },
-  async prioAdd(text, pos) { const { data, error } = await sb.from("du_priorities").insert({ text, pos }).select().single(); if (error) throw error; S.prio = S.prio.filter(x => x.id !== data.id); S.prio.push(data); return data; },
+  async prioAdd(text, pos, urgent) { const { data, error } = await sb.from("du_priorities").insert({ text, pos, urgent: !!urgent }).select().single(); if (error) throw error; S.prio = S.prio.filter(x => x.id !== data.id); S.prio.push(data); return data; },
   async prioSet(id, patch) { const { data, error } = await sb.from("du_priorities").update({ ...patch, updated_at: new Date().toISOString() }).eq("id", id).select().single(); if (error) throw error; S.prio = S.prio.map(x => x.id === id ? data : x); return data; },
   async prioDel(id) { const { error } = await sb.from("du_priorities").delete().eq("id", id); if (error) throw error; S.prio = S.prio.filter(x => x.id !== id); },
   async taskCheck(id, on) {
@@ -137,7 +137,7 @@ function demoApi() {
   return {
     async load() {
       S.tasks = demoTasks(); S.taskDone = {}; S.taskChecksReady = true; S.prioReady = true;
-      S.prio = ["Lithia Toyota of Odessa – chase numbers", "Katy Honda – 4 tickets waiting on data", "Upload Lombard Toyota recalls"].map((text, i) => ({ id: "p" + i, text, pos: i, done: i === 2, updated_at: new Date().toISOString() }));
+      S.prio = ["Lithia Toyota of Odessa – chase numbers", "Katy Honda – 4 tickets waiting on data", "Upload Lombard Toyota recalls"].map((text, i) => ({ id: "p" + i, text, pos: i, urgent: i < 2, done: i === 2, updated_at: new Date().toISOString() }));
       S.uploads = rows; S.profiles = Object.fromEntries(people.map(([id, email, full_name]) => [id, { id, email, full_name, is_manager: id === "d1" }])); S.me = S.profiles.d1; S.sync = { started_at: new Date(Date.now() - 6 * 6e4).toISOString(), finished_at: new Date().toISOString(), found: 3, created: 0 }; },
     subscribe() {},
     async insert(b) { const r = { id: crypto.randomUUID(), created_at: new Date().toISOString(), source: "manual", ...b }; rows.unshift(r); (ev[r.id] = ev[r.id] || []).unshift({ action: "created", actor_id: "d1", created_at: r.created_at, detail: {} }); return r; },
@@ -148,7 +148,7 @@ function demoApi() {
     async itinSet(day, key, patch) { let x = S.itin.find(i => i.day === day && i.item_key === key); if (!x) { x = { id: crypto.randomUUID(), day, item_key: key, created_at: new Date().toISOString() }; S.itin.push(x); } Object.assign(x, patch); return x; },
     async itinDel(id) { S.itin = S.itin.filter(x => x.id !== id); },
     async reloadItin() {},
-    async prioAdd(text, pos) { const x = { id: crypto.randomUUID(), text, pos, done: false, updated_at: new Date().toISOString() }; S.prio.push(x); return x; },
+    async prioAdd(text, pos, urgent) { const x = { id: crypto.randomUUID(), text, pos, urgent: !!urgent, done: false, updated_at: new Date().toISOString() }; S.prio.push(x); return x; },
     async prioSet(id, patch) { const x = S.prio.find(p => p.id === id); Object.assign(x, patch, { updated_at: new Date().toISOString() }); return x; },
     async prioDel(id) { S.prio = S.prio.filter(p => p.id !== id); },
     async taskCheck(id, on) { S.taskDone[id] = { task_id: id, done: on, done_by: on ? "d1" : null, done_at: on ? new Date().toISOString() : null }; },
@@ -229,8 +229,9 @@ function fillOwners() { const s = $("f-owner"); s.replaceChildren(el("option", {
 function go(page) {
   S.page = page; store.set("du-page", page);
   document.querySelectorAll("#nav button").forEach(b => b.classList.toggle("active", b.dataset.page === page));
-  ["uploads", "today", "hubspot", "calendar", "checker", "template"].forEach(p => $("p-" + p).hidden = p !== page);
+  ["uploads", "today", "prio", "hubspot", "calendar", "checker", "template"].forEach(p => $("p-" + p).hidden = p !== page);
   window.scrollTo(0, 0);
+  if (page === "prio") { try { renderPrio(); } catch (e) { console.error(e); } }
   if (page === "today" && S.me) api.reloadItin().then(() => { if (S.page === "today") renderToday(); }).catch(() => {});
 }
 document.querySelectorAll("#nav button").forEach(b => b.addEventListener("click", () => go(b.dataset.page)));
@@ -600,40 +601,62 @@ function renderToday() {
 })();
 
 /* =========================================================
-   PRIORITIES — sidebar list. Managers edit; anyone can tick an item off.
+   PRIORITIES — its own page. Managers write, mark urgent and reorder; anyone can tick items off.
    ========================================================= */
 function renderPrio() {
-  const box = $("prio"); if (!box) return;
-  const mgr = isManager(), editing = mgr && S.prioEdit, list = (S.prio || []).slice().sort((a, b) => a.pos - b.pos);
-  $("prio-edit").hidden = !mgr; $("prio-edit").textContent = editing ? "Done" : "Edit";
-  const last = list.reduce((m, x) => x.updated_at > m ? x.updated_at : m, "");
+  if (!$("p-prio")) return;
+  const mgr = isManager(), all = (S.prio || []).slice().sort((a, b) => a.pos - b.pos);
+  const open = all.filter(x => !x.done), done = all.length - open.length, urgentOpen = open.filter(x => x.urgent).length;
+  $("n-prio").textContent = open.length || "";
+  $("n-prio").classList.toggle("hot", urgentOpen > 0);
+  const last = all.reduce((m, x) => (x.updated_at || "") > m ? x.updated_at : m, "");
   const lastDay = last ? new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(last)) : "";
-  $("prio-upd").textContent = last ? "Updated " + (lastDay === today() ? new Date(last).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: TZ }) : fmtDate(lastDay)) : "";
-  const move = async (i, dir) => { const a = list[i], b = list[i + dir]; if (!b) return; const pa = a.pos, pb = b.pos === a.pos ? a.pos + dir : b.pos; try { await Promise.all([api.prioSet(a.id, { pos: pb }), api.prioSet(b.id, { pos: pa })]); renderPrio(); } catch (e) { toast("Couldn't move: " + e.message); } };
-  $("prio-list").replaceChildren(...list.map((x, i) => {
-    const chk = el("button", { type: "button", class: "pcheck" + (x.done ? " on" : ""), "aria-pressed": x.done ? "true" : "false", "aria-label": (x.done ? "Undo: " : "Done: ") + x.text, text: x.done ? "✓" : String(i + 1) });
-    chk.addEventListener("click", async () => { try { await api.prioSet(x.id, { done: !x.done, done_by: !x.done ? meId() : null, done_at: !x.done ? new Date().toISOString() : null }); renderPrio(); } catch (e) { toast("Couldn't save: " + e.message); } });
-    if (!editing) return el("li", { class: x.done ? "done" : "", title: x.done && x.done_by ? "Done by " + name(x.done_by) : null }, [chk, el("span", { class: "ptext", text: x.text })]);
-    const inp = el("textarea", { class: "pinput", rows: 2, "aria-label": "Priority " + (i + 1) }); inp.value = x.text;
-    inp.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); inp.blur(); } });
-    inp.addEventListener("change", async () => { const v = inp.value.trim(); if (!v || v === x.text) return; try { await api.prioSet(x.id, { text: v }); } catch (e) { toast("Couldn't save: " + e.message); } });
-    return el("li", { class: "editing" + (x.done ? " done" : "") }, [chk, inp, el("span", { class: "pbtns" }, [
-      el("button", { type: "button", "aria-label": "Move up", text: "↑", disabled: i === 0 ? true : null, onclick: () => move(i, -1) }),
-      el("button", { type: "button", "aria-label": "Move down", text: "↓", disabled: i === list.length - 1 ? true : null, onclick: () => move(i, 1) }),
-      el("button", { type: "button", "aria-label": "Remove", text: "×", onclick: async () => { try { await api.prioDel(x.id); renderPrio(); } catch (e) { toast("Couldn't remove: " + e.message); } } })])]);
-  }));
-  $("prio-empty").hidden = list.length > 0 || editing;
-  $("prio-empty").textContent = mgr ? "No priorities yet. Click Edit to add some." : "No priorities set for today.";
-  $("prio-form").hidden = !editing; $("prio-clear").hidden = !editing || !list.some(x => x.done);
+  $("prio-upd").textContent = last ? "Updated " + (lastDay === today() ? "today at " + new Date(last).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: TZ }) : fmtDate(lastDay)) : "Nothing here yet";
+  const pct = all.length ? Math.round(done / all.length * 100) : 0;
+  $("prio-ring").style.setProperty("--p", pct);
+  $("prio-pct").textContent = all.length ? done + " of " + all.length : "0";
+  $("prio-cheer").textContent = !all.length ? "A fresh start" : done === all.length ? "All done, you're amazing!" : urgentOpen ? urgentOpen + " urgent to go" : "Nothing urgent left";
+  $("prio-form").hidden = !mgr;
+  $("prio-clear").hidden = !mgr || !done;
+  const group = urgent => {
+    const list = all.filter(x => !!x.urgent === urgent).sort((a, b) => a.done - b.done || a.pos - b.pos);
+    const ids = list.filter(x => !x.done);
+    return list.map(x => {
+      const i = ids.indexOf(x);
+      const heart = el("button", { type: "button", class: "gheart" + (x.done ? " on" : ""), "aria-pressed": x.done ? "true" : "false", "aria-label": (x.done ? "Undo: " : "Done: ") + x.text, title: x.done && x.done_by ? "Done by " + name(x.done_by) + (x.done_at ? " at " + new Date(x.done_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: TZ }) : "") : "Mark done", text: x.done ? "♥" : "♡" });
+      heart.addEventListener("click", async () => { try { await api.prioSet(x.id, { done: !x.done, done_by: !x.done ? meId() : null, done_at: !x.done ? new Date().toISOString() : null }); if (!x.done) confetti(heart); renderPrio(); } catch (e) { toast("Couldn't save: " + e.message); } });
+      let body;
+      if (mgr) {
+        body = el("textarea", { class: "gtext", rows: 1, "aria-label": "Priority" }); body.value = x.text;
+        const fit = () => { if (!body.scrollHeight) return; body.style.height = "auto"; body.style.height = body.scrollHeight + "px"; }; requestAnimationFrame(fit);
+        body.addEventListener("input", fit);
+        body.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); body.blur(); } });
+        body.addEventListener("change", async () => { const v = body.value.trim(); if (!v || v === x.text) return; try { await api.prioSet(x.id, { text: v }); } catch (e) { toast("Couldn't save: " + e.message); } });
+      } else body = el("span", { class: "gtext", text: x.text });
+      const move = async dir => { const o = ids[i + dir]; if (!o) return; const pa = x.pos, pb = o.pos === x.pos ? x.pos + dir : o.pos; try { await Promise.all([api.prioSet(x.id, { pos: pb }), api.prioSet(o.id, { pos: pa })]); renderPrio(); } catch (e) { toast("Couldn't move: " + e.message); } };
+      const tools = mgr ? el("span", { class: "gtools" }, [
+        el("button", { type: "button", class: "gflag", text: urgent ? "Not urgent" : "Urgent", title: urgent ? "Move to Not urgent" : "Mark as urgent", onclick: async () => { try { await api.prioSet(x.id, { urgent: !urgent }); renderPrio(); } catch (e) { toast("Couldn't save: " + e.message); } } }),
+        x.done ? null : el("button", { type: "button", "aria-label": "Move up", text: "↑", disabled: i <= 0 ? true : null, onclick: () => move(-1) }),
+        x.done ? null : el("button", { type: "button", "aria-label": "Move down", text: "↓", disabled: i < 0 || i === ids.length - 1 ? true : null, onclick: () => move(1) }),
+        el("button", { type: "button", "aria-label": "Remove", text: "×", onclick: async () => { try { await api.prioDel(x.id); renderPrio(); } catch (e) { toast("Couldn't remove: " + e.message); } } })]) : null;
+      return el("li", { class: "gitem" + (x.done ? " done" : "") }, [heart, body, tools]);
+    });
+  };
+  const fill = (id, urgent, emptyText) => { const items = group(urgent); $(id).replaceChildren(...(items.length ? items : [el("li", { class: "gnone", text: emptyText })])); };
+  fill("prio-urgent", true, mgr ? "Nothing urgent. Add one above and tick “Urgent”." : "Nothing urgent right now.");
+  fill("prio-later", false, mgr ? "Add priorities above." : "Nothing here right now.");
+  $("prio-un").textContent = all.filter(x => x.urgent && !x.done).length || "";
+  $("prio-ln").textContent = all.filter(x => !x.urgent && !x.done).length || "";
 }
 (function wirePrio() {
-  if (!$("prio")) return;
-  $("prio-edit").addEventListener("click", () => { S.prioEdit = !S.prioEdit; renderPrio(); if (S.prioEdit) $("prio-new").focus(); });
+  if (!$("p-prio")) return;
+  const tog = $("prio-urg");
+  tog.addEventListener("click", () => { const on = tog.getAttribute("aria-pressed") !== "true"; tog.setAttribute("aria-pressed", on ? "true" : "false"); });
   $("prio-form").addEventListener("submit", async e => {
     e.preventDefault(); const v = $("prio-new").value.trim(); if (!v) return;
     if (!S.prioReady) return toast("Run priorities.sql in Supabase first");
-    try { await api.prioAdd(v, Math.max(-1, ...(S.prio || []).map(x => x.pos)) + 1); $("prio-new").value = ""; renderPrio(); $("prio-new").focus(); }
-    catch (er) { toast("Couldn't add: " + er.message); }
+    try { await api.prioAdd(v, Math.max(-1, ...(S.prio || []).map(x => x.pos)) + 1, tog.getAttribute("aria-pressed") === "true"); $("prio-new").value = ""; renderPrio(); $("prio-new").focus(); }
+    catch (er) { toast("Couldn't add: " + er.message + (/urgent/.test(er.message) ? " (run the priorities update SQL)" : "")); }
   });
   $("prio-clear").addEventListener("click", async () => { try { for (const x of (S.prio || []).filter(x => x.done)) await api.prioDel(x.id); renderPrio(); } catch (e) { toast("Couldn't clear: " + e.message); } });
 })();
