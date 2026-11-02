@@ -7,7 +7,7 @@
 <link rel="icon" href="logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@500;600;700;800&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@500&display=swap">
-<link rel="stylesheet" href="styles.css?v=20261027d">
+<link rel="stylesheet" href="styles.css?v=20261102b">
 </head>
 <body>
 
@@ -41,6 +41,13 @@
       <button data-page="checker"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10l4 4 8-9"/></svg>File checker</button>
       <button data-page="template"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 2h7l4 4v12H5zM12 2v4h4"/></svg>Template</button>
     </nav>
+    <section class="prio" id="prio" aria-label="Priorities">
+      <header><h2>Priorities</h2><span id="prio-upd"></span><button type="button" class="prio-edit" id="prio-edit" hidden>Edit</button></header>
+      <ol id="prio-list"></ol>
+      <p class="prio-empty" id="prio-empty" hidden></p>
+      <form id="prio-form" hidden autocomplete="off"><input id="prio-new" placeholder="Add a priority…" aria-label="New priority" maxlength="160"><button type="submit">Add</button></form>
+      <button type="button" class="prio-clear" id="prio-clear" hidden>Clear done items</button>
+    </section>
     <div class="side-foot">
       <div class="me" id="me"></div>
       <button class="link light" id="signout">Sign out</button>
@@ -262,6 +269,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js?v=20261015b"></script>
 <script src="rules.js?v=20261022b"></script>
-<script src="app.js?v=20261028a"></script>
+<script src="app.js?v=20261102b"></script>
 </body>
 </html>

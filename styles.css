@@ -425,3 +425,32 @@ button.pmark[disabled]{cursor:default}
 .pline .dot{width:10px;height:10px;border-radius:50%;background:var(--kc);flex:none}
 .pline b{font-weight:800}
 .pgroup h3 .pfor{font-weight:600;letter-spacing:0;text-transform:none;color:var(--ink)}
+
+/* Sidebar priorities */
+.prio{flex:0 1 auto;min-height:0;display:flex;flex-direction:column;gap:8px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:12px 10px}
+.prio header{display:flex;align-items:center;flex-wrap:wrap;gap:2px 6px;padding:0 2px}
+.prio h2{margin:0;font:700 12px var(--display);letter-spacing:.08em;text-transform:uppercase;color:#fff}
+.prio header span{font-size:11px;color:#9fb0cf;order:3;width:100%}
+.prio-edit{margin-left:auto;background:none;border:1px solid rgba(255,255,255,.25);color:#fff;font:700 11px var(--body);border-radius:6px;padding:2px 8px;cursor:pointer}
+.prio-edit:hover{background:rgba(255,255,255,.1)}
+.prio ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;overflow-y:auto;min-height:0}
+.prio li{display:flex;align-items:flex-start;gap:8px;font-size:13px;line-height:1.35;color:#e6ecf7;padding:4px 2px}
+.prio li.done .ptext{text-decoration:line-through;opacity:.5}
+.pcheck{flex:none;width:20px;height:20px;border-radius:50%;border:1.5px solid #f2c94c;background:transparent;color:#f2c94c;font:800 10.5px var(--body);display:grid;place-items:center;cursor:pointer;padding:0}
+.pcheck:hover{background:rgba(242,201,76,.18)}
+.pcheck.on{background:#3a944a;border-color:#3a944a;color:#fff}
+.ptext{min-width:0;overflow-wrap:anywhere}
+.prio li.editing{display:grid;grid-template-columns:20px minmax(0,1fr);gap:4px 8px;align-items:start}
+.prio li.editing .pbtns{grid-column:2;justify-self:end}
+.pinput{width:100%;min-width:0;resize:vertical;font-family:inherit;line-height:1.35;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);color:#fff;border-radius:6px;padding:4px 6px;font-size:12.5px}
+.pbtns{display:flex;flex:none}
+.pbtns button{background:none;border:0;color:#c9d5ea;cursor:pointer;font-size:13px;padding:2px 4px;border-radius:4px}
+.pbtns button:hover:not([disabled]){background:rgba(255,255,255,.12);color:#fff}
+.pbtns button[disabled]{opacity:.3;cursor:default}
+#prio-form{display:flex;gap:4px}
+#prio-form input{flex:1;min-width:0;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);color:#fff;border-radius:6px;padding:6px 8px;font-size:12.5px}
+#prio-form input::placeholder{color:#9fb0cf}
+#prio-form button{background:#f2c94c;color:#1b2540;border:0;border-radius:6px;font:700 12px var(--body);padding:0 10px;cursor:pointer}
+.prio-empty{margin:0;font-size:12px;color:#9fb0cf;padding:0 2px}
+.prio-clear{align-self:flex-start;background:none;border:0;color:#9fb0cf;font:600 11.5px var(--body);cursor:pointer;padding:0 2px;text-decoration:underline}
+@media (max-width:900px){.prio{display:none}}

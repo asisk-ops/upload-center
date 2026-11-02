@@ -64,6 +64,8 @@ const api = LIVE ? {
     S.uploads = u.data; S.profiles = Object.fromEntries((p.data || []).map(x => [x.id, x])); S.sync = (s.data || [])[0] || null;
     const tk = await sb.from("du_tasks").select("*").order("due_at");  // table may not exist yet
     S.tasks = tk.error ? [] : tk.data;
+    const pr = await sb.from("du_priorities").select("*").order("pos");  // sidebar priority list
+    S.prio = pr.error ? [] : pr.data; S.prioReady = !pr.error;
     const td = await sb.from("du_task_checks").select("*");  // check marks made on the dashboard
     S.taskDone = Object.fromEntries((td.error ? [] : td.data).map(x => [x.task_id, x])); S.taskChecksReady = !td.error;
     const it = await sb.from("du_itinerary").select("*").or(`day.gte.${addDays(today(), -30)},day.eq.2000-01-01`);  // recent days + everyone's routine template
@@ -85,6 +87,9 @@ const api = LIVE ? {
         if (eventType !== "DELETE") S.tasks.push(n);
         S.tasks.sort((a, b) => (a.due_at || "") < (b.due_at || "") ? -1 : 1); onChange();
       })
+      .on("postgres_changes", { event: "*", schema: "public", table: "du_priorities" }, ({ eventType, new: n, old: o }) => {
+        S.prio = S.prio.filter(x => x.id !== (n && n.id) && x.id !== (o && o.id)); if (eventType !== "DELETE") S.prio.push(n); onChange();
+      })
       .on("postgres_changes", { event: "*", schema: "public", table: "du_task_checks" }, ({ eventType, new: n, old: o }) => {
         if (eventType === "DELETE") delete S.taskDone[o.task_id]; else S.taskDone[n.task_id] = n; onChange();
       })
@@ -101,6 +106,9 @@ const api = LIVE ? {
     if (error) throw error; S.itin = S.itin.filter(x => !(x.day === day && x.item_key === key)); S.itin.push(data); return data;
   },
   async itinDel(id) { const { error } = await sb.from("du_itinerary").delete().eq("id", id); if (error) throw error; S.itin = S.itin.filter(x => x.id !== id); },
+  async prioAdd(text, pos) { const { data, error } = await sb.from("du_priorities").insert({ text, pos }).select().single(); if (error) throw error; S.prio = S.prio.filter(x => x.id !== data.id); S.prio.push(data); return data; },
+  async prioSet(id, patch) { const { data, error } = await sb.from("du_priorities").update({ ...patch, updated_at: new Date().toISOString() }).eq("id", id).select().single(); if (error) throw error; S.prio = S.prio.map(x => x.id === id ? data : x); return data; },
+  async prioDel(id) { const { error } = await sb.from("du_priorities").delete().eq("id", id); if (error) throw error; S.prio = S.prio.filter(x => x.id !== id); },
   async taskCheck(id, on) {
     const { data, error } = await sb.from("du_task_checks").upsert({ task_id: id, done: on, done_by: on ? meId() : null, done_at: on ? new Date().toISOString() : null }, { onConflict: "task_id" }).select().single();
     if (error) throw error; S.taskDone[id] = data; return data;
@@ -128,7 +136,8 @@ function demoApi() {
     mk("Example Acura", "Recalls", "Received", -1, null, { source: "hubspot", hubspot_ticket_id: "1003", hubspot_ticket_name: "Example Acura – recall list", hubspot_owner: "Alyssa (demo)", hubspot_created_at: addDays(t, -3) + "T15:00:00Z", hubspot_in_stage: true, hubspot_stage: "Upload Needed", row_count: 430 })];
   return {
     async load() {
-      S.tasks = demoTasks(); S.taskDone = {}; S.taskChecksReady = true;
+      S.tasks = demoTasks(); S.taskDone = {}; S.taskChecksReady = true; S.prioReady = true;
+      S.prio = ["Lithia Toyota of Odessa – chase numbers", "Katy Honda – 4 tickets waiting on data", "Upload Lombard Toyota recalls"].map((text, i) => ({ id: "p" + i, text, pos: i, done: i === 2, updated_at: new Date().toISOString() }));
       S.uploads = rows; S.profiles = Object.fromEntries(people.map(([id, email, full_name]) => [id, { id, email, full_name, is_manager: id === "d1" }])); S.me = S.profiles.d1; S.sync = { started_at: new Date(Date.now() - 6 * 6e4).toISOString(), finished_at: new Date().toISOString(), found: 3, created: 0 }; },
     subscribe() {},
     async insert(b) { const r = { id: crypto.randomUUID(), created_at: new Date().toISOString(), source: "manual", ...b }; rows.unshift(r); (ev[r.id] = ev[r.id] || []).unshift({ action: "created", actor_id: "d1", created_at: r.created_at, detail: {} }); return r; },
@@ -139,6 +148,9 @@ function demoApi() {
     async itinSet(day, key, patch) { let x = S.itin.find(i => i.day === day && i.item_key === key); if (!x) { x = { id: crypto.randomUUID(), day, item_key: key, created_at: new Date().toISOString() }; S.itin.push(x); } Object.assign(x, patch); return x; },
     async itinDel(id) { S.itin = S.itin.filter(x => x.id !== id); },
     async reloadItin() {},
+    async prioAdd(text, pos) { const x = { id: crypto.randomUUID(), text, pos, done: false, updated_at: new Date().toISOString() }; S.prio.push(x); return x; },
+    async prioSet(id, patch) { const x = S.prio.find(p => p.id === id); Object.assign(x, patch, { updated_at: new Date().toISOString() }); return x; },
+    async prioDel(id) { S.prio = S.prio.filter(p => p.id !== id); },
     async taskCheck(id, on) { S.taskDone[id] = { task_id: id, done: on, done_by: on ? "d1" : null, done_at: on ? new Date().toISOString() : null }; },
     async hasRoutine(uid) { return S.itin.some(x => x.day === "2000-01-01" && x.item_key.startsWith("u:" + uid + ":r:")); }
   };
@@ -227,6 +239,7 @@ function render() {
   const open = needList().length;
   const hs = S.uploads.filter(r => r.source === "hubspot" && r.hubspot_in_stage !== false && r.status !== "Loaded").length;
   $("n-open").textContent = open || ""; $("n-hs").textContent = hs || "";
+  try { renderPrio(); } catch (e) { console.error("Priorities:", e); }
   renderUploads(); renderHubspot(); try { renderCalendar(); } catch (e) { console.error("Calendar:", e); } try { renderToday(); } catch (e) { console.error("Today:", e); }
   $("dealers").replaceChildren(...[...new Set(S.uploads.map(r => r.dealer).filter(Boolean))].sort().map(d => el("option", { value: d })));
 }
@@ -584,6 +597,45 @@ function renderToday() {
   let tmr; const saveWin = () => { const d = S.itWinDraft; if (!d) return; clearTimeout(tmr); api.itinSet(d.day, uKey("win"), { label: d.v, custom: false, done: false }).then(() => { if (S.itWinDraft === d) S.itWinDraft = null; }).catch(() => {}); };
   $("it-win").addEventListener("input", e => { S.itWinDraft = { day: S.itDay || today(), v: e.target.value }; clearTimeout(tmr); tmr = setTimeout(saveWin, 600); });
   $("it-win").addEventListener("blur", saveWin);
+})();
+
+/* =========================================================
+   PRIORITIES — sidebar list. Managers edit; anyone can tick an item off.
+   ========================================================= */
+function renderPrio() {
+  const box = $("prio"); if (!box) return;
+  const mgr = isManager(), editing = mgr && S.prioEdit, list = (S.prio || []).slice().sort((a, b) => a.pos - b.pos);
+  $("prio-edit").hidden = !mgr; $("prio-edit").textContent = editing ? "Done" : "Edit";
+  const last = list.reduce((m, x) => x.updated_at > m ? x.updated_at : m, "");
+  const lastDay = last ? new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(last)) : "";
+  $("prio-upd").textContent = last ? "Updated " + (lastDay === today() ? new Date(last).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: TZ }) : fmtDate(lastDay)) : "";
+  const move = async (i, dir) => { const a = list[i], b = list[i + dir]; if (!b) return; const pa = a.pos, pb = b.pos === a.pos ? a.pos + dir : b.pos; try { await Promise.all([api.prioSet(a.id, { pos: pb }), api.prioSet(b.id, { pos: pa })]); renderPrio(); } catch (e) { toast("Couldn't move: " + e.message); } };
+  $("prio-list").replaceChildren(...list.map((x, i) => {
+    const chk = el("button", { type: "button", class: "pcheck" + (x.done ? " on" : ""), "aria-pressed": x.done ? "true" : "false", "aria-label": (x.done ? "Undo: " : "Done: ") + x.text, text: x.done ? "✓" : String(i + 1) });
+    chk.addEventListener("click", async () => { try { await api.prioSet(x.id, { done: !x.done, done_by: !x.done ? meId() : null, done_at: !x.done ? new Date().toISOString() : null }); renderPrio(); } catch (e) { toast("Couldn't save: " + e.message); } });
+    if (!editing) return el("li", { class: x.done ? "done" : "", title: x.done && x.done_by ? "Done by " + name(x.done_by) : null }, [chk, el("span", { class: "ptext", text: x.text })]);
+    const inp = el("textarea", { class: "pinput", rows: 2, "aria-label": "Priority " + (i + 1) }); inp.value = x.text;
+    inp.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); inp.blur(); } });
+    inp.addEventListener("change", async () => { const v = inp.value.trim(); if (!v || v === x.text) return; try { await api.prioSet(x.id, { text: v }); } catch (e) { toast("Couldn't save: " + e.message); } });
+    return el("li", { class: "editing" + (x.done ? " done" : "") }, [chk, inp, el("span", { class: "pbtns" }, [
+      el("button", { type: "button", "aria-label": "Move up", text: "↑", disabled: i === 0 ? true : null, onclick: () => move(i, -1) }),
+      el("button", { type: "button", "aria-label": "Move down", text: "↓", disabled: i === list.length - 1 ? true : null, onclick: () => move(i, 1) }),
+      el("button", { type: "button", "aria-label": "Remove", text: "×", onclick: async () => { try { await api.prioDel(x.id); renderPrio(); } catch (e) { toast("Couldn't remove: " + e.message); } } })])]);
+  }));
+  $("prio-empty").hidden = list.length > 0 || editing;
+  $("prio-empty").textContent = mgr ? "No priorities yet. Click Edit to add some." : "No priorities set for today.";
+  $("prio-form").hidden = !editing; $("prio-clear").hidden = !editing || !list.some(x => x.done);
+}
+(function wirePrio() {
+  if (!$("prio")) return;
+  $("prio-edit").addEventListener("click", () => { S.prioEdit = !S.prioEdit; renderPrio(); if (S.prioEdit) $("prio-new").focus(); });
+  $("prio-form").addEventListener("submit", async e => {
+    e.preventDefault(); const v = $("prio-new").value.trim(); if (!v) return;
+    if (!S.prioReady) return toast("Run priorities.sql in Supabase first");
+    try { await api.prioAdd(v, Math.max(-1, ...(S.prio || []).map(x => x.pos)) + 1); $("prio-new").value = ""; renderPrio(); $("prio-new").focus(); }
+    catch (er) { toast("Couldn't add: " + er.message); }
+  });
+  $("prio-clear").addEventListener("click", async () => { try { for (const x of (S.prio || []).filter(x => x.done)) await api.prioDel(x.id); renderPrio(); } catch (e) { toast("Couldn't clear: " + e.message); } });
 })();
 
 /* =========================================================
