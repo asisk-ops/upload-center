@@ -138,7 +138,12 @@ function demoApi() {
     async load() {
       S.tasks = demoTasks(); S.taskDone = {}; S.taskChecksReady = true; S.prioReady = true;
       S.prio = ["Lithia Toyota of Odessa – chase numbers", "Katy Honda – 4 tickets waiting on data", "Upload Lombard Toyota recalls"].map((text, i) => ({ id: "p" + i, text, pos: i, urgent: i < 2, done: i === 2, updated_at: new Date().toISOString() }));
-      S.uploads = rows; S.profiles = Object.fromEntries(people.map(([id, email, full_name]) => [id, { id, email, full_name, is_manager: id === "d1" }])); S.me = S.profiles.d1; S.sync = { started_at: new Date(Date.now() - 6 * 6e4).toISOString(), finished_at: new Date().toISOString(), found: 3, created: 0 }; },
+      { const hr = rows.filter(r => r.source === "hubspot"), h = n => new Date(Date.now() - n * 36e5).toISOString();
+        const extra = [["Lamborghini Houston", "McLaren Non-Retained Vehicles – Lamborghini Houston", "Data Needed", "Urgent", 5, 1], ["Nyle Maxwell CDJR", "Data Uploads – Nyle Maxwell CDJR", "Data Needed", "Medium", 30, 3],
+          ["Mark McLarty Toyota", "Data Uploads – Mark McLarty Toyota", "Upload Needed", "Medium", 26, 2], ["Katy Honda", "Data Uploads – Katy Honda", "Needs Formatting", "High", 50, 6], ["Lithia Toyota of Odessa", "Odessa Toyota Care need numbers", "Data Needed", "Low", 200, 21]];
+        extra.forEach(([d, n, st, pr, la, ag], i) => rows.push({ id: crypto.randomUUID(), dealer: d, list_type: null, status: "Received", received_on: addDays(t, -ag), source: "hubspot", hubspot_ticket_id: String(2000 + i), hubspot_ticket_name: n, hubspot_owner: "Vanessa De Jose", hubspot_created_at: h(ag * 24), hubspot_in_stage: true, hubspot_stage: st, hubspot_priority: pr, hubspot_last_activity: h(la) }));
+        hr.forEach((r, i) => { r.hubspot_priority = ["High", "Urgent", "Medium"][i % 3]; r.hubspot_last_activity = h(3 + i * 20); }); }
+      S.uploads = rows; S.profiles = Object.fromEntries(people.map(([id, email, full_name]) => [id, { id, email, full_name, is_manager: id === "d1" }])); S.me = S.profiles.d1; S.sync = { started_at: new Date(Date.now() - 6 * 6e4).toISOString(), finished_at: new Date().toISOString(), found: 8, created: 0, hidden: 2, stages: STAGE_ORDER.map(label => ({ label, open: true })) }; },
     subscribe() {},
     async insert(b) { const r = { id: crypto.randomUUID(), created_at: new Date().toISOString(), source: "manual", ...b }; rows.unshift(r); (ev[r.id] = ev[r.id] || []).unshift({ action: "created", actor_id: "d1", created_at: r.created_at, detail: {} }); return r; },
     async update(id, p) { const r = rows.find(x => x.id === id); if (p.status && p.status !== r.status) (ev[id] = ev[id] || []).unshift({ action: "status", actor_id: "d1", created_at: new Date().toISOString(), detail: { from: r.status, to: p.status } }); Object.assign(r, p); return r; },
@@ -809,38 +814,96 @@ const HS_STAGES = [["Data Needed", "b-data", "Waiting on the dealer for data"], 
 const stageOf = r => { const k = String(r.hubspot_stage || "").toLowerCase().replace(/[^a-z]/g, ""); const m = HS_STAGES.find(([n]) => n.toLowerCase().replace(/[^a-z]/g, "") === k); return m ? m[0] : (r.hubspot_stage || "Upload Needed"); };
 const stageCls = n => (HS_STAGES.find(x => x[0] === n) || [, "b-other"])[1];
 const stagePill = r => el("span", { class: "bucket " + stageCls(stageOf(r)), text: stageOf(r) });
+/* HubSpot board — every open stage of the Data Uploads pipeline, laid out like HubSpot */
+const STAGE_ORDER = ["Data Needed", "Needs Formatting", "Upload Needed"];
+const PRIO = [["Urgent", "p-urgent"], ["High", "p-high"], ["Medium", "p-medium"], ["Low", "p-low"]];
+const prioOf = r => { const v = String(r.hubspot_priority || "").toLowerCase(); const m = PRIO.find(([n]) => n.toLowerCase() === v); return m ? m[0] : (r.hubspot_priority || ""); };
+const prioRank = r => { const i = PRIO.findIndex(([n]) => n === prioOf(r)); return i < 0 ? 9 : i; };
+const prioCls = n => (PRIO.find(x => x[0] === n) || [, "p-none"])[1];
+const boardStages = list => {
+  const fromSync = (S.sync && Array.isArray(S.sync.stages) ? S.sync.stages : []).filter(x => x && x.open !== false).map(x => x.label);
+  const order = fromSync.length ? fromSync : STAGE_ORDER.slice();
+  return order;
+};
+const openFor = r => { const a = r.hubspot_created_at ? days(new Date(r.hubspot_created_at).toLocaleDateString("en-CA", { timeZone: TZ }), today()) : null; return a == null ? "" : a <= 0 ? "Open today" : a === 1 ? "Open for a day" : "Open for " + a + " days"; };
+const mdy = ts => ts ? new Date(ts).toLocaleDateString("en-US", { timeZone: TZ, month: "2-digit", day: "2-digit", year: "numeric" }) : "–";
 function renderHubspot() {
   const H = S.uploads.filter(r => r.source === "hubspot");
-  const inPipe = H.filter(r => r.hubspot_in_stage !== false).sort((a, b) => (a.hubspot_created_at || "") < (b.hubspot_created_at || "") ? -1 : 1);
-  const f = S.hsStage || "";
-  const list = f ? inPipe.filter(r => stageOf(r) === f) : inPipe;
+  const shown = boardStages([]);
+  const inPipe = H.filter(r => r.hubspot_in_stage !== false && shown.includes(r.hubspot_stage || "Upload Needed"));
   const t = today(), age = r => r.hubspot_created_at ? days(r.hubspot_created_at.slice(0, 10), t) : null;
+  // filters
+  const q = (S.hsQ || "").toLowerCase(), fo = S.hsOwner || "", fp = S.hsPrio || "", fc = S.hsCcm || "";
+  const owners = [...new Set(inPipe.map(r => r.hubspot_owner || "Unassigned"))].sort();
+  const fillSel = (id, label, opts, cur) => { const sel = $(id); sel.replaceChildren(el("option", { value: "", text: label }), ...opts.map(o => { const x = el("option", { value: o, text: o }); x.selected = o === cur; return x; })); };
+  fillSel("hs-owner", "Ticket owner: all", owners, fo);
+  fillSel("hs-prio", "Priority: all", [...PRIO.map(x => x[0]), "No priority"], fp);
+  fillSel("hs-ccm", "CCM: all", [...Object.keys(CCMS), "No CCM"], fc);
+  const list = inPipe.filter(r => (!fo || (r.hubspot_owner || "Unassigned") === fo)
+    && (!fp || (fp === "No priority" ? !prioOf(r) : prioOf(r) === fp))
+    && (!fc || (fc === "No CCM" ? !ccmOf(r) : (ccmOf(r) || {}).ccm === fc))
+    && (!q || [r.dealer, r.hubspot_ticket_name, r.hubspot_ticket_id, r.hubspot_owner].join(" ").toLowerCase().includes(q)));
   const ages = list.map(age).filter(x => x != null), oldest = ages.length ? Math.max(...ages) : null;
-  const pick = v => { S.hsStage = S.hsStage === v ? "" : v; renderHubspot(); };
   $("hs-kpis").replaceChildren(
-    ...HS_STAGES.map(([n, c, sub]) => { const k = kpi("bucketkpi " + c + (f === n ? " on" : ""), n, inPipe.filter(r => stageOf(r) === n).length, sub, () => pick(n)); return k; }),
-    kpi(oldest > 7 ? "bad" : "", "Oldest ticket", oldest == null ? "–" : oldest, f ? "In " + f : "Since the ticket opened", null, oldest == null ? "" : oldest === 1 ? "day" : "days"),
+    kpi("", "Open tickets", list.length, (fo || fp || fc || q) ? "Matching your filters" : "In the help desk, not snoozed"),
+    kpi(list.some(r => prioOf(r) === "Urgent") ? "bad" : "", "Urgent", list.filter(r => prioOf(r) === "Urgent").length, "Priority set to Urgent", () => { S.hsPrio = S.hsPrio === "Urgent" ? "" : "Urgent"; renderHubspot(); }),
+    kpi("", "Upload Needed", list.filter(r => stageOf(r) === "Upload Needed").length, "Ready to be uploaded"),
+    kpi(oldest > 7 ? "bad" : "", "Oldest ticket", oldest == null ? "–" : oldest, "Since the ticket opened", null, oldest == null ? "" : oldest === 1 ? "day" : "days"),
     kpi("good", "Uploaded from HubSpot", H.filter(r => r.status === "Loaded").length, "All time", () => { go("uploads"); setStatus("Loaded"); }));
-  $("hs-seg").replaceChildren(...[["", "All buckets", inPipe.length], ...HS_STAGES.map(([n]) => [n, n, inPipe.filter(r => stageOf(r) === n).length])].map(([v, l, c]) =>
-    el("button", { class: (f === v ? "on " : "") + (v ? stageCls(v) : ""), role: "tab", "aria-selected": f === v ? "true" : "false", onclick: () => { S.hsStage = v; renderHubspot(); } }, [v ? el("i", { class: "dot" }) : null, l, el("i", { text: c })])));
   const s = S.sync, info = $("syncinfo");
   info.className = "sync" + (s && s.error ? " err" : "");
-  info.textContent = !s ? "Not synced yet" : s.error ? "Last sync note: " + s.error.slice(0, 90) : `Synced ${ago(s.finished_at || s.started_at)} · ${s.found ?? 0} tickets in the pipeline${s.created ? ", " + s.created + " new" : ""}`;
-  const row = r => {
-    const a = age(r), tk = ticketLink(r, r.hubspot_ticket_name || "#" + r.hubspot_ticket_id);
-    const st = el("select", { class: "st st-" + r.status, "aria-label": "Status for " + r.dealer, onclick: e => e.stopPropagation() }, STATUSES.map(([v, l]) => { const o = el("option", { value: v, text: l }); o.selected = v === r.status; return o; }));
-    st.addEventListener("change", () => quickStatus(r, st.value));
-    return el("tr", { class: "click", onclick: () => openDrawer(r) }, [
-      el("td", { class: "dealer" }, [el("b", {}, tk), el("small", { text: "#" + r.hubspot_ticket_id })]), el("td", { text: r.dealer }), el("td", {}, ccmChip(r) || el("span", { class: "faint", text: "–" })),
-      el("td", {}, stagePill(r)),
-      el("td", {}, a == null ? "–" : el("span", { class: a > 7 ? "late" : "", text: a === 0 ? "Today" : a + (a === 1 ? " day" : " days") })),
-      el("td", {}, r.list_url ? el("a", { class: "listlink", href: r.list_url, target: "_blank", rel: "noopener", text: "Open list ↗", onclick: e => e.stopPropagation() }) : el("span", { class: "faint", text: "No link yet" })), el("td", {}, st),
-      el("td", { text: fmtDate(r.received_on) }), el("td", { text: fmtDate(r.uploaded_on) })]);
-  };
-  $("hs-rows").replaceChildren(...list.map(row));
-  const E = $("hs-empty"); E.hidden = list.length > 0;
-  if (!list.length) E.replaceChildren(el("b", { text: f ? "Nothing in " + f : "No tickets in the pipeline" }), s ? "Nothing is waiting in HubSpot right now." : "Once the HubSpot sync is set up, tickets show up here.");
+  info.textContent = !s ? "Not synced yet" : s.error ? "Last sync note: " + s.error.slice(0, 90) : `Synced ${ago(s.finished_at || s.started_at)} · ${s.found ?? 0} open tickets${s.hidden ? " · " + s.hidden + " snoozed or not in help desk (hidden)" : ""}`;
+  const view = S.hsView || "board";
+  document.querySelectorAll("#hs-view button").forEach(b => b.classList.toggle("on", b.dataset.v === view));
+  $("hs-board").hidden = view !== "board"; $("hs-tablewrap").hidden = view !== "table";
+  const sorted = list.slice().sort((a, b) => prioRank(a) - prioRank(b) || ((a.hubspot_created_at || "") < (b.hubspot_created_at || "") ? -1 : 1));
+  if (view === "board") {
+    const stages = boardStages(inPipe);
+    $("hs-board").replaceChildren(...stages.map((st, i) => {
+      const items = sorted.filter(r => (r.hubspot_stage || "Upload Needed") === st);
+      const ci = { "Data Needed": 7, "Needs Formatting": 1, "Upload Needed": 6 }[st] ?? (i % 8);
+      return el("section", { class: "bcol", style: `--sc:var(--sc${ci});--sb:var(--sb${ci})` }, [
+        el("header", {}, [el("span", { class: "bchip", text: st }), el("b", { text: items.length })]),
+        el("div", { class: "bcards" }, items.length ? items.map(hsCard) : [el("p", { class: "bnone", text: "No tickets" })])]);
+    }));
+  } else {
+    const row = r => {
+      const a = age(r), tk = ticketLink(r, r.hubspot_ticket_name || "#" + r.hubspot_ticket_id);
+      const st = el("select", { class: "st st-" + r.status, "aria-label": "Status for " + r.dealer, onclick: e => e.stopPropagation() }, STATUSES.map(([v, l]) => { const o = el("option", { value: v, text: l }); o.selected = v === r.status; return o; }));
+      st.addEventListener("change", () => quickStatus(r, st.value));
+      const pr = prioOf(r);
+      return el("tr", { class: "click", onclick: () => openDrawer(r) }, [
+        el("td", { class: "dealer" }, [el("b", {}, tk), el("small", { text: "#" + r.hubspot_ticket_id })]), el("td", { text: r.dealer }), el("td", {}, ccmChip(r) || el("span", { class: "faint", text: "–" })),
+        el("td", {}, el("span", { class: "bstage", text: r.hubspot_stage || "Upload Needed" })),
+        el("td", {}, pr ? el("span", { class: "prio " + prioCls(pr) }, [el("i"), pr]) : el("span", { class: "faint", text: "–" })),
+        el("td", { text: r.hubspot_owner || "Unassigned" }),
+        el("td", {}, a == null ? "–" : el("span", { class: a > 7 ? "late" : "", text: a === 0 ? "Today" : a + (a === 1 ? " day" : " days") })),
+        el("td", {}, r.list_url ? el("a", { class: "listlink", href: r.list_url, target: "_blank", rel: "noopener", text: "Open list ↗", onclick: e => e.stopPropagation() }) : el("span", { class: "faint", text: "No link yet" })), el("td", {}, st)]);
+    };
+    $("hs-rows").replaceChildren(...sorted.map(row));
+  }
+  const E = $("hs-empty"); E.hidden = list.length > 0 || view === "board";
+  if (!list.length) E.replaceChildren(el("b", { text: inPipe.length ? "No tickets match these filters" : "No open tickets" }), s ? "Nothing is waiting in the HubSpot help desk right now." : "Once the HubSpot sync is set up, tickets show up here.");
 }
+function hsCard(r) {
+  const pr = prioOf(r), m = ccmOf(r), href = ticketHref(r);
+  return el("article", { class: "bcard", tabindex: "0", onclick: () => openDrawer(r), onkeydown: e => { if (e.key === "Enter") openDrawer(r); } }, [
+    el(href ? "a" : "b", { class: "btitle", href, target: href ? "_blank" : null, rel: href ? "noopener" : null, title: href ? "Open in HubSpot" : null, text: r.hubspot_ticket_name || "Ticket #" + r.hubspot_ticket_id, onclick: e => e.stopPropagation() }),
+    el("p", { class: "bline", text: openFor(r) }),
+    el("p", { class: "bline" }, ["Ticket owner: ", el("span", { text: r.hubspot_owner || "Unassigned" })]),
+    el("p", { class: "bline" }, ["Create date: " + mdy(r.hubspot_created_at)]),
+    pr ? el("div", { class: "bsec" }, el("span", { class: "prio " + prioCls(pr) }, [el("i"), pr])) : null,
+    el("div", { class: "bsec bco" }, [el("span", { class: "bicon", "aria-hidden": "true", text: "▦" }), el("span", { class: "bdealer", text: r.dealer }), m ? el("span", { class: "ccm " + (CCM_CLS[m.ccm] || "") + (m.sure ? "" : " maybe"), title: "CCM: " + m.ccm, text: m.ccm + (m.sure ? "" : "?") }) : null]),
+    el("div", { class: "bfoot" }, [
+      r.hubspot_last_activity ? el("span", { class: "bact", title: "Last activity " + new Date(r.hubspot_last_activity).toLocaleString("en-US", { timeZone: TZ }) }, ["⏱ ", ago(r.hubspot_last_activity)]) : el("span", { class: "bact faint", text: "No activity yet" }),
+      r.list_url ? el("a", { class: "listlink", href: r.list_url, target: "_blank", rel: "noopener", text: "Open list ↗", onclick: e => e.stopPropagation() }) : null])]);
+}
+(function wireHubspot() {
+  $("hs-q").addEventListener("input", e => { S.hsQ = e.target.value; renderHubspot(); });
+  [["hs-owner", "hsOwner"], ["hs-prio", "hsPrio"], ["hs-ccm", "hsCcm"]].forEach(([id, k]) => $(id).addEventListener("change", e => { S[k] = e.target.value; renderHubspot(); }));
+  document.querySelectorAll("#hs-view button").forEach(b => b.addEventListener("click", () => { S.hsView = b.dataset.v; store.set("du-hsview", S.hsView); renderHubspot(); }));
+  S.hsView = store.get("du-hsview") || "board";
+})();
 $("syncnow").addEventListener("click", async () => {
   const b = $("syncnow"); b.disabled = true; b.textContent = "Syncing…";
   try {

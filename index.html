@@ -7,7 +7,7 @@
 <link rel="icon" href="logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@500;600;700;800&family=Dancing+Script:wght@700&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@500&display=swap">
-<link rel="stylesheet" href="styles.css?v=20261102d">
+<link rel="stylesheet" href="styles.css?v=20261111a">
 </head>
 <body>
 
@@ -173,16 +173,23 @@
       </div>
     </section>
 
-    <section class="page" id="p-hubspot" hidden>
+    <section class="page wide" id="p-hubspot" hidden>
       <header class="phead">
-        <div><h1>HubSpot queue</h1><p class="sub">Tickets in the <b>Data Needed</b>, <b>Needs Formatting</b> and <b>Upload Needed</b> stages in HubSpot. Checked every 15 minutes; when a ticket leaves these stages it drops off this page.</p></div>
+        <div><h1>HubSpot queue</h1><p class="sub">Open tickets in <b>Data Needed</b>, <b>Needs Formatting</b> and <b>Upload Needed</b> that are in the help desk. Snoozed tickets are left off until the snooze ends. Checked every 15 minutes.</p></div>
         <div class="actions"><span class="sync" id="syncinfo"></span><button class="btn" id="syncnow">Sync now</button></div>
       </header>
       <div class="kpis" id="hs-kpis"></div>
       <div class="card flush">
-        <div class="tbar"><div class="seg buckets" id="hs-seg" role="tablist" aria-label="HubSpot stage"></div></div>
-        <div class="table-wrap"><table class="tbl">
-          <thead><tr><th>Ticket</th><th>Dealer</th><th>CCM</th><th>HubSpot stage</th><th>Ticket age</th><th>List</th><th>Tracker status</th><th>Came in</th><th>Uploaded</th></tr></thead>
+        <div class="tbar hsbar">
+          <input id="hs-q" type="search" placeholder="Search tickets, dealers…" aria-label="Search tickets">
+          <select id="hs-owner" aria-label="Ticket owner"></select>
+          <select id="hs-prio" aria-label="Priority"></select>
+          <select id="hs-ccm" aria-label="CCM"></select>
+          <div class="seg" id="hs-view" role="tablist" aria-label="View"><button data-v="board">Board</button><button data-v="table">Table</button></div>
+        </div>
+        <div class="board" id="hs-board"></div>
+        <div class="table-wrap" id="hs-tablewrap" hidden><table class="tbl">
+          <thead><tr><th>Ticket</th><th>Dealer</th><th>CCM</th><th>Stage</th><th>Priority</th><th>Owner</th><th>Ticket age</th><th>List</th><th>Tracker status</th></tr></thead>
           <tbody id="hs-rows"></tbody>
         </table></div>
         <div class="empty" id="hs-empty" hidden></div>
@@ -291,6 +298,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js?v=20261015b"></script>
 <script src="rules.js?v=20261022b"></script>
-<script src="app.js?v=20261103a"></script>
+<script src="app.js?v=20261111c"></script>
 </body>
 </html>
