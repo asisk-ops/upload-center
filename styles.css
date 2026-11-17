@@ -509,3 +509,9 @@ a.btitle:hover{text-decoration:underline}
 .p-urgent{--pc:#c0262d}.p-high{--pc:#e8590c}.p-medium{--pc:#f2b200}.p-low{--pc:#3a944a}.p-none{--pc:var(--muted)}
 .bstage{font-size:12px;font-weight:600;background:var(--track);border-radius:5px;padding:2px 8px;white-space:nowrap}
 @media (max-width:700px){.bcol{flex-basis:84vw;max-height:none}.hsbar #hs-view{margin-left:0}}
+.hshidden{margin:0 14px 14px;border:1px dashed var(--line);border-radius:9px;padding:8px 12px;font-size:13px;color:var(--muted)}
+.hshidden summary{cursor:pointer;font-weight:600}
+.hshidden ul{list-style:none;margin:8px 0 2px;padding:0;display:flex;flex-direction:column;gap:6px}
+.hshidden li{display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--ink)}
+.hshidden li a{font-weight:700;color:var(--blue)}
+.hreason{color:var(--muted);font-size:12.5px}

@@ -7,7 +7,7 @@
 <link rel="icon" href="logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@500;600;700;800&family=Dancing+Script:wght@700&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@500&display=swap">
-<link rel="stylesheet" href="styles.css?v=20261111a">
+<link rel="stylesheet" href="styles.css?v=20261117a">
 </head>
 <body>
 
@@ -188,6 +188,7 @@
           <div class="seg" id="hs-view" role="tablist" aria-label="View"><button data-v="board">Board</button><button data-v="table">Table</button></div>
         </div>
         <div class="board" id="hs-board"></div>
+        <details class="hshidden" id="hs-hidden" hidden><summary>Not shown on the board: <b id="hs-hidden-n"></b> snoozed or not in the help desk</summary><ul id="hs-hidden-list"></ul></details>
         <div class="table-wrap" id="hs-tablewrap" hidden><table class="tbl">
           <thead><tr><th>Ticket</th><th>Dealer</th><th>CCM</th><th>Stage</th><th>Priority</th><th>Owner</th><th>Ticket age</th><th>List</th><th>Tracker status</th></tr></thead>
           <tbody id="hs-rows"></tbody>
@@ -298,6 +299,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js?v=20261015b"></script>
 <script src="rules.js?v=20261022b"></script>
-<script src="app.js?v=20261111c"></script>
+<script src="app.js?v=20261117a"></script>
 </body>
 </html>

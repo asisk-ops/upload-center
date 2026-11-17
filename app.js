@@ -143,7 +143,7 @@ function demoApi() {
           ["Mark McLarty Toyota", "Data Uploads – Mark McLarty Toyota", "Upload Needed", "Medium", 26, 2], ["Katy Honda", "Data Uploads – Katy Honda", "Needs Formatting", "High", 50, 6], ["Lithia Toyota of Odessa", "Odessa Toyota Care need numbers", "Data Needed", "Low", 200, 21]];
         extra.forEach(([d, n, st, pr, la, ag], i) => rows.push({ id: crypto.randomUUID(), dealer: d, list_type: null, status: "Received", received_on: addDays(t, -ag), source: "hubspot", hubspot_ticket_id: String(2000 + i), hubspot_ticket_name: n, hubspot_owner: "Vanessa De Jose", hubspot_created_at: h(ag * 24), hubspot_in_stage: true, hubspot_stage: st, hubspot_priority: pr, hubspot_last_activity: h(la) }));
         hr.forEach((r, i) => { r.hubspot_priority = ["High", "Urgent", "Medium"][i % 3]; r.hubspot_last_activity = h(3 + i * 20); }); }
-      S.uploads = rows; S.profiles = Object.fromEntries(people.map(([id, email, full_name]) => [id, { id, email, full_name, is_manager: id === "d1" }])); S.me = S.profiles.d1; S.sync = { started_at: new Date(Date.now() - 6 * 6e4).toISOString(), finished_at: new Date().toISOString(), found: 8, created: 0, hidden: 2, stages: STAGE_ORDER.map(label => ({ label, open: true })) }; },
+      S.uploads = rows; S.profiles = Object.fromEntries(people.map(([id, email, full_name]) => [id, { id, email, full_name, is_manager: id === "d1" }])); S.me = S.profiles.d1; S.sync = { started_at: new Date(Date.now() - 6 * 6e4).toISOString(), finished_at: new Date().toISOString(), found: 8, created: 0, hidden: 2, stages: STAGE_ORDER.map(label => ({ label, open: true })), hidden_list: [{ id: "3001", name: "Data Uploads – Toyota of Poway", stage: "Upload Needed", reason: "Snoozed until Nov 19, 9:00 AM (hs_snoozed_until)" }, { id: "3002", name: "Data Uploads – Village Ford", stage: "Upload Needed", reason: "Not in help desk (hs_in_helpdesk = false)" }] }; },
     subscribe() {},
     async insert(b) { const r = { id: crypto.randomUUID(), created_at: new Date().toISOString(), source: "manual", ...b }; rows.unshift(r); (ev[r.id] = ev[r.id] || []).unshift({ action: "created", actor_id: "d1", created_at: r.created_at, detail: {} }); return r; },
     async update(id, p) { const r = rows.find(x => x.id === id); if (p.status && p.status !== r.status) (ev[id] = ev[id] || []).unshift({ action: "status", actor_id: "d1", created_at: new Date().toISOString(), detail: { from: r.status, to: p.status } }); Object.assign(r, p); return r; },
@@ -209,6 +209,7 @@ async function enter(session) {
   if (LIVE && S.profiles[S.me.id]) S.me = S.profiles[S.me.id];
   renderMe(); fillOwners(); render();
   if (!(S.me && S.me.is_manager)) go("today");  // team members land on their daily itinerary
+  autoSync(); if (!S.autoTimer) S.autoTimer = setInterval(autoSync, 60000);
   api.subscribe(render);
 }
 function boot() {
@@ -882,6 +883,17 @@ function renderHubspot() {
     };
     $("hs-rows").replaceChildren(...sorted.map(row));
   }
+  // Tickets the sync left off (snoozed / not in help desk), with the reason
+  const hl = (S.sync && Array.isArray(S.sync.hidden_list)) ? S.sync.hidden_list : [];
+  const hb = $("hs-hidden"); hb.hidden = !hl.length;
+  if (hl.length) {
+    const tHref = id => portalId() ? `https://${C.HUBSPOT_HOST || "app.hubspot.com"}/contacts/${portalId()}/record/0-5/${id}` : null;
+    $("hs-hidden-n").textContent = hl.length;
+    $("hs-hidden-list").replaceChildren(...hl.map(x => el("li", {}, [
+      tHref(x.id) ? el("a", { href: tHref(x.id), target: "_blank", rel: "noopener", text: x.name }) : el("b", { text: x.name }),
+      x.stage ? el("span", { class: "bstage", text: x.stage }) : null,
+      el("span", { class: "hreason", text: x.reason || "Hidden" })])));
+  }
   const E = $("hs-empty"); E.hidden = list.length > 0 || view === "board";
   if (!list.length) E.replaceChildren(el("b", { text: inPipe.length ? "No tickets match these filters" : "No open tickets" }), s ? "Nothing is waiting in the HubSpot help desk right now." : "Once the HubSpot sync is set up, tickets show up here.");
 }
@@ -904,6 +916,17 @@ function hsCard(r) {
   document.querySelectorAll("#hs-view button").forEach(b => b.addEventListener("click", () => { S.hsView = b.dataset.v; store.set("du-hsview", S.hsView); renderHubspot(); }));
   S.hsView = store.get("du-hsview") || "board";
 })();
+/* Auto sync: while the dashboard is open, pull from HubSpot whenever the last sync is over 5 minutes old
+   (on top of the 15-minute schedule in Supabase). Runs quietly in the background. */
+function autoSync() {
+  if (!LIVE || !S.me || S.autoSyncing || document.hidden) return;
+  const s = S.sync, last = s && (s.finished_at || s.started_at), age = last ? Date.now() - new Date(last) : Infinity;
+  const running = s && !s.finished_at && age < 3 * 6e4;
+  if (running || age < 5 * 6e4) return;
+  S.autoSyncing = true;
+  api.sync().catch(() => {}).finally(() => { S.autoSyncing = false; });
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden) autoSync(); });
 $("syncnow").addEventListener("click", async () => {
   const b = $("syncnow"); b.disabled = true; b.textContent = "Syncing…";
   try {
