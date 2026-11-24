@@ -557,3 +557,11 @@ td.urgentrow{box-shadow:inset 3px 0 0 #e84a8a}
 .gflagic{flex:none;width:28px;height:28px;border-radius:50%;background:var(--g-card);color:var(--gc);display:grid;place-items:center;font-size:14px}
 .gmeta{display:flex;align-items:center;gap:4px;flex-wrap:wrap;font-size:12px;color:var(--g-muted);margin-top:2px}
 .glinked .gtext{display:block;padding-top:0}
+
+/* File checker → list */
+.attach{display:flex;align-items:center;gap:12px;flex-wrap:wrap;border-left:4px solid var(--blue)}
+.attach-txt{display:flex;flex-direction:column;gap:2px;flex:1 1 240px;min-width:0}
+.attach-txt .faint{font-size:12.5px}
+.attach select{flex:1 1 280px;min-width:0;width:auto}
+.chkfile{background:none;border:1px dashed var(--line);color:var(--blue);border-radius:6px;padding:3px 8px;font:700 12px var(--body);cursor:pointer;white-space:nowrap}
+.chkfile:hover{border-style:solid;border-color:var(--blue)}

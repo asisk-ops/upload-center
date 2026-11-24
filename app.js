@@ -238,6 +238,7 @@ function go(page) {
   ["uploads", "today", "prio", "hubspot", "calendar", "checker", "template"].forEach(p => $("p-" + p).hidden = p !== page);
   window.scrollTo(0, 0);
   if (page === "prio") { try { renderPrio(); } catch (e) { console.error(e); } }
+  if (page !== "checker" && S.checkFor && !go.keep) S.checkFor = null;
   if (page === "today" && S.me) api.reloadItin().then(() => { if (S.page === "today") renderToday(); }).catch(() => {});
 }
 document.querySelectorAll("#nav button").forEach(b => b.addEventListener("click", () => go(b.dataset.page)));
@@ -328,8 +329,8 @@ function renderUploads() {
       el("td", {}, r.received_on ? el("span", { class: "camein" }, [fmtDate(r.received_on), r.status !== "Loaded" ? agePill(days(r.received_on, t)) : null]) : (r.due_on ? el("span", {}, [el("span", { class: "faint", text: "due " + fmtDate(r.due_on) + " " }), isLate(r) ? el("span", { class: "late", text: "Late" }) : null]) : el("span", { class: "faint", text: "–" }))),
       el("td", {}, up),
       el("td", { class: "num" }, tn == null || tn < 0 ? el("span", { class: "faint", text: "–" }) : (tn === 0 ? "Same day" : tn + (tn === 1 ? " day" : " days"))),
-      el("td", { class: "num", text: fmt(r.row_count) }),
-      el("td", { class: "num", text: fmt(r.issue_count), style: +r.issue_count ? "color:var(--red);font-weight:700" : null }),
+      el("td", { class: "num" }, r.row_count == null ? el("button", { type: "button", class: "chkfile", title: "Check this list's file. Fills in Rows and Issues", text: "Check file", onclick: e => { e.stopPropagation(); checkFileFor(r); } }) : fmt(r.row_count)),
+      el("td", { class: "num", text: r.row_count == null && r.issue_count == null ? "" : fmt(r.issue_count), style: +r.issue_count ? "color:var(--red);font-weight:700" : null }),
       el("td", {}, who(r.owner_id))]);
   }));
   const E = $("empty"); E.hidden = list.length > 0;
@@ -1003,6 +1004,46 @@ $("syncnow").addEventListener("click", async () => {
 /* =========================================================
    FILE CHECKER
    ========================================================= */
+/* File checker ↔ lists: save a checked file's row and issue counts onto a list in the tracker */
+const openLists = () => S.uploads.filter(r => live(r) && r.status !== "Loaded");
+function guessList(R) {
+  if (S.checkFor && S.uploads.some(r => r.id === S.checkFor)) return S.checkFor;
+  const want = new Set(ccmTokens((R.dealer || "") + " " + R.name.replace(/[_\-.]+/g, " ")));
+  let best = null, bestSc = 0;
+  for (const r of openLists()) {
+    const toks = [...new Set(ccmTokens(r.dealer))]; if (!toks.length) continue;
+    const sc = toks.filter(t => want.has(t)).length / toks.length + (R.type && r.list_type === R.type ? 0.3 : 0);
+    if (sc > bestSc) { bestSc = sc; best = r.id; }
+  }
+  return bestSc >= 0.6 ? best : "";
+}
+function attachPanel(R, errN, colBad) {
+  const lists = openLists().sort((a, b) => a.dealer.localeCompare(b.dealer));
+  const pick = guessList(R), clean = !colBad && !errN;
+  const sel = el("select", { "aria-label": "List to save these results to" }, [el("option", { value: "", text: "Choose a list…" }),
+    ...lists.map(r => { const o = el("option", { value: r.id, text: `${r.dealer} · ${r.list_type || r.hubspot_ticket_name || "List"}${r.received_on ? " · came in " + fmtDate(r.received_on) : ""}` }); o.selected = r.id === pick; return o; })]);
+  const ready = el("input", { type: "checkbox" }); ready.checked = clean;
+  const save = el("button", { class: "btn", text: "Save to list", onclick: async () => {
+    const r = S.uploads.find(x => x.id === sel.value); if (!r) return toast("Pick the list this file belongs to");
+    const patch = { row_count: R.total, issue_count: errN, file_name: R.name };
+    if (!r.list_type && R.type) patch.list_type = R.type;
+    if (ready.checked && clean) patch.status = "Ready";
+    if (!r.received_on) patch.received_on = today();
+    try {
+      await api.update(r.id, patch); render();
+      toast(`Saved to ${r.dealer}: ${fmt(R.total)} rows, ${fmt(errN)} to fix${patch.status ? " · Ready to upload" : ""}`);
+      if (S.checkFor) { S.checkFor = null; go("uploads"); }
+      else renderResult(R);
+    } catch (e) { toast("Couldn't save: " + e.message); }
+  } });
+  const target = S.uploads.find(x => x.id === pick);
+  return el("div", { class: "attach card" }, [
+    el("div", { class: "attach-txt" }, [el("b", { text: "Save these results to a list" }), el("span", { class: "faint", text: S.checkFor && target ? `Checking the file for ${target.dealer}.` : pick ? "Matched by dealer name. Change it if it's wrong." : "Fills in Rows and Issues on the Uploads page." })]),
+    sel, clean ? el("label", { class: "chk" }, [ready, " Mark Ready to upload"]) : null, save]);
+}
+function checkFileFor(r) {   // from a row on the Uploads page: pick a file, check it, save to this list
+  S.checkFor = r.id; go("checker"); $("result").replaceChildren(); $("file").click();
+}
 function renderResult(R) {
   const box = $("result");
   if (R.fatal) return box.replaceChildren(el("div", { class: "verdict bad" }, el("div", {}, [el("h2", { text: "Can't check this file" }), el("p", { text: R.fatal })])));
@@ -1021,7 +1062,9 @@ function renderResult(R) {
     const csv = [R.out.join(",")].concat(R.clean.map(r => r.map(csvCell).join(","))).join("\r\n") + "\r\n";
     const a = el("a", { href: URL.createObjectURL(new Blob([csv], { type: "text/csv" })), download: R.name.replace(/\.csv$/i, "") + "_clean.csv" }); document.body.append(a); a.click(); a.remove();
   } });
+  const attach = attachPanel(R, errN, colBad);
   const kids = [
+    attach,
     el("div", { class: "verdict " + cls }, [el("div", {}, [el("h2", { text: head }), el("p", { text: sub }), extraNote ? el("p", { style: "font-size:13px", text: extraNote }) : null, el("p", { class: "faint", style: "font-size:12px", text: `${R.name} · ${R.type} · ${fmt(R.total)} rows` })]), el("div", { class: "actions" }, [dl, logBtn])]),
     el("div", { class: "grid" }, [
       el("div", { class: "card c-5" }, [el("div", { class: "ctitle", text: "File and headers" }), el("ul", { class: "checks" }, R.checks.map(([k, t]) => el("li", { class: k, text: t })))]),
