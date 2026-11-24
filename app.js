@@ -295,8 +295,12 @@ function renderUploads() {
   $("rows").replaceChildren(...list.map(r => {
     const st = el("select", { class: "st st-" + r.status, "aria-label": "Status for " + r.dealer, onclick: e => e.stopPropagation() }, STATUSES.map(([v, l]) => { const o = el("option", { value: v, text: l }); o.selected = v === r.status; return o; }));
     st.addEventListener("change", () => quickStatus(r, st.value));
-    const up = el("input", { type: "date", class: "inline", value: r.uploaded_on || "", "aria-label": "Uploaded date for " + r.dealer, onclick: e => e.stopPropagation() });
-    up.addEventListener("change", () => quickUploaded(r, up.value));
+    // Not uploaded yet: one-click button (sets Uploaded + today's date). Already uploaded: the date, still editable.
+    let up;
+    if (r.status === "Loaded") {
+      up = el("input", { type: "date", class: "inline", value: r.uploaded_on || "", "aria-label": "Uploaded date for " + r.dealer, onclick: e => e.stopPropagation() });
+      up.addEventListener("change", () => quickUploaded(r, up.value));
+    } else up = el("button", { type: "button", class: "markup", text: "✓ Mark uploaded", title: "Marks this list Uploaded today", onclick: e => { e.stopPropagation(); markUploaded(r); } });
     const tn = turn(r);
     return el("tr", { class: "click", onclick: () => openDrawer(r) }, [
       el("td", { class: "dealer" }, [el("b", {}, [r.dealer, r.source === "hubspot" ? (ticketHref(r) ? el("a", { class: "src", href: ticketHref(r), target: "_blank", rel: "noopener", title: "Open ticket in HubSpot", text: "HubSpot ↗", onclick: e => e.stopPropagation() }) : el("span", { class: "src", text: "HubSpot" })) : null]), r.file_name ? el("small", { text: r.file_name }) : null, r.list_url ? el("a", { class: "listlink", href: r.list_url, target: "_blank", rel: "noopener", text: "Open list ↗", onclick: e => e.stopPropagation() }) : null, ticketHref(r) ? ticketLink(r, "View ticket #" + r.hubspot_ticket_id + " ↗", "listlink tixlink") : null, r.source === "hubspot" && r.hubspot_in_stage !== false && stageOf(r) !== "Upload Needed" ? el("div", { style: "margin-top:3px" }, stagePill(r)) : null]),
@@ -385,18 +389,34 @@ function renderByType() {
   $("bytype").replaceChildren(rows.length ? el("div", { class: "rowbars" }, rows.map(([n, c]) => el("div", { class: "rb" }, [el("span", { text: n }), el("div", { class: "tr" }, el("div", { style: `width:${c / mx * 100}%` })), el("b", { text: c })]))) : el("div", { class: "empty", text: "Nothing in Upload Needed." }));
 }
 
+async function markUploaded(r) {
+  const prev = { status: r.status, uploaded_on: r.uploaded_on || null, received_on: r.received_on || null };
+  const patch = { status: "Loaded", uploaded_on: today() };
+  if (!r.received_on) patch.received_on = today();
+  try {
+    await api.update(r.id, patch); render();
+    toastUndo(`${r.dealer} marked uploaded today`, async () => { try { await api.update(r.id, prev); render(); toast("Undone"); } catch (e) { toast("Couldn't undo: " + e.message); } });
+  } catch (e) { toast("Couldn't save: " + e.message); render(); }
+}
+function toastUndo(msg, undo) {
+  const t = $("toast"); t.replaceChildren(msg + " ", el("button", { type: "button", class: "toastbtn", text: "Undo", onclick: () => { t.hidden = true; undo(); } }));
+  t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => t.hidden = true, 6000);
+}
 async function quickStatus(r, status) {
   const patch = { status };
   if (status !== "Expected" && !r.received_on) patch.received_on = today();
   if (status === "Loaded" && !r.uploaded_on) patch.uploaded_on = today();
+  if (status !== "Loaded" && r.uploaded_on) patch.uploaded_on = null;   // status and uploaded date always agree
   try { await api.update(r.id, patch); toast(`${r.dealer} → ${stLabel(status)}`); render(); } catch (e) { toast("Couldn't save: " + e.message); render(); }
 }
 async function quickUploaded(r, date) {
   const patch = { uploaded_on: date || null };
   if (date && r.status !== "Loaded") patch.status = "Loaded";
+  if (!date && r.status === "Loaded") patch.status = r.received_on ? "Received" : "Expected";
   if (date && !r.received_on) patch.received_on = date;
   try { await api.update(r.id, patch); toast(date ? `${r.dealer} uploaded ${fmtDate(date)}` : "Uploaded date cleared"); render(); } catch (e) { toast("Couldn't save: " + e.message); render(); }
 }
+(() => { const d = $("ustats"); try { d.open = store.get("du-ustats") === "1"; } catch (e) {} d.addEventListener("toggle", () => { store.set("du-ustats", d.open ? "1" : "0"); if (d.open) render(); }); })();
 $("q").addEventListener("input", e => { S.q = e.target.value; renderUploads(); });
 $("ft").addEventListener("change", e => { S.type = e.target.value; renderUploads(); });
 document.querySelectorAll("#p-uploads th[data-sort]").forEach(th => th.addEventListener("click", () => { const k = th.dataset.sort; S.sort = { key: k, dir: S.sort.key === k && S.sort.dir === "desc" ? "asc" : "desc" }; renderUploads(); }));

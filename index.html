@@ -7,7 +7,7 @@
 <link rel="icon" href="logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@500;600;700;800&family=Dancing+Script:wght@700&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@500&display=swap">
-<link rel="stylesheet" href="styles.css?v=20261117a">
+<link rel="stylesheet" href="styles.css?v=20261124a">
 </head>
 <body>
 
@@ -57,20 +57,6 @@
         <div><h1>Uploads</h1><p class="sub" id="u-sub">Every dealer list, from the day it comes in to the day it's uploaded.</p></div>
         <div class="actions"><button class="btn ghost" id="export">Export CSV</button><button class="btn" id="add">+ Log upload</button></div>
       </header>
-      <div class="kpis" id="kpis"></div>
-      <div class="grid">
-        <div class="card c-8">
-          <div class="drhead"><div class="ctitle" id="dr-title" style="margin:0">Daily uploads</div>
-            <div class="drange">
-              <select id="dr-preset" aria-label="Date range"></select>
-              <input type="date" id="dr-from" aria-label="From date"><span class="faint">to</span><input type="date" id="dr-to" aria-label="To date">
-            </div></div>
-          <div class="dstats" id="dr-stats"></div>
-          <div id="daily"></div>
-          <p class="faint" id="dr-empty" hidden style="margin:4px 0 0;font-size:12.5px">Nothing was uploaded in these dates.</p>
-        </div>
-        <div class="card c-4"><div class="ctitle">Upload Needed by list type</div><div id="bytype"></div></div>
-      </div>
       <div class="card flush">
         <div class="tbar">
           <div class="utitle"><h2 id="u-title">Upload Needed</h2><span class="faint" id="u-count"></span></div>
@@ -91,6 +77,23 @@
         </table></div>
         <div class="empty" id="empty" hidden></div>
       </div>
+      <details class="ustats" id="ustats">
+        <summary><span>Stats &amp; trends</span><span class="faint" id="ustats-hint">KPIs, daily uploads chart, list types</span></summary>
+        <div class="kpis" id="kpis"></div>
+        <div class="grid">
+          <div class="card c-8">
+            <div class="drhead"><div class="ctitle" id="dr-title" style="margin:0">Daily uploads</div>
+              <div class="drange">
+                <select id="dr-preset" aria-label="Date range"></select>
+                <input type="date" id="dr-from" aria-label="From date"><span class="faint">to</span><input type="date" id="dr-to" aria-label="To date">
+              </div></div>
+            <div class="dstats" id="dr-stats"></div>
+            <div id="daily"></div>
+            <p class="faint" id="dr-empty" hidden style="margin:4px 0 0;font-size:12.5px">Nothing was uploaded in these dates.</p>
+          </div>
+          <div class="card c-4"><div class="ctitle">Upload Needed by list type</div><div id="bytype"></div></div>
+        </div>
+      </details>
     </section>
 
     <!-- HUBSPOT -->
@@ -299,6 +302,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js?v=20261015b"></script>
 <script src="rules.js?v=20261022b"></script>
-<script src="app.js?v=20261117a"></script>
+<script src="app.js?v=20261124a"></script>
 </body>
 </html>
