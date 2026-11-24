@@ -542,3 +542,18 @@ a.btitle:hover{text-decoration:underline}
 .agepill.age-bad{color:var(--age-bad);background:var(--age-badbg)}
 .agetext.age-ok{color:var(--age-ok)}.agetext.age-warn{color:var(--age-warn);font-weight:700}.agetext.age-bad{color:var(--age-bad);font-weight:700}
 #fo{width:auto;min-width:140px}
+
+/* Urgent flag */
+.flag{background:none;border:1px solid var(--line);color:var(--faint);border-radius:6px;width:22px;height:22px;padding:0;margin-right:6px;font-size:12px;line-height:1;cursor:pointer;vertical-align:middle}
+.flag:hover{color:#e84a8a;border-color:#e84a8a}
+.flag.on{background:#e84a8a;border-color:#e84a8a;color:#fff}
+.hsurgent{font:800 10px var(--body);letter-spacing:.05em;color:var(--age-bad);background:var(--age-badbg);border-radius:4px;padding:1px 5px;margin:0 6px}
+td.urgentrow{box-shadow:inset 3px 0 0 #e84a8a}
+.bcard.flagged{box-shadow:inset 3px 0 0 #e84a8a}
+.bfoot .flag{margin-right:0}
+.glinkhead{list-style:none;font:700 11px var(--body);letter-spacing:.08em;text-transform:uppercase;color:var(--g-muted);margin:8px 2px 0}
+.gitem.glinked{cursor:pointer;align-items:center}
+.gitem.glinked:hover{box-shadow:0 0 0 1.5px var(--gc)}
+.gflagic{flex:none;width:28px;height:28px;border-radius:50%;background:var(--g-card);color:var(--gc);display:grid;place-items:center;font-size:14px}
+.gmeta{display:flex;align-items:center;gap:4px;flex-wrap:wrap;font-size:12px;color:var(--g-muted);margin-top:2px}
+.glinked .gtext{display:block;padding-top:0}

@@ -263,6 +263,16 @@ function kpi(cls, k, v, s, onclick, unit) {
 }
 function setStatus(st) { S.upFilter = null; S.status = st; store.set("du-status", st); renderUploads(); $("rows").closest(".card").scrollIntoView({ behavior: "smooth", block: "start" }); }
 
+// Urgent: flagged on the dashboard, or set to Urgent priority in HubSpot. Shows up in Priorities automatically
+// and drops off when the list is uploaded or the ticket leaves the pipeline.
+const isHsUrgent = r => r.source === "hubspot" && r.hubspot_in_stage !== false && String(r.hubspot_priority || "").toLowerCase() === "urgent";
+const urgentLinked = () => S.uploads.filter(r => live(r) && r.status !== "Loaded" && (r.source !== "hubspot" || r.hubspot_in_stage !== false) && (r.urgent || isHsUrgent(r)));
+async function toggleUrgent(r) {
+  const on = !r.urgent;
+  try { await api.update(r.id, { urgent: on }); toast(on ? `${r.dealer} flagged urgent. It's in Priorities now` : `${r.dealer} unflagged`); render(); }
+  catch (e) { toast(/urgent/.test(e.message || "") ? "Run urgent-flag.sql in Supabase first" : "Couldn't save: " + e.message); }
+}
+const flagBtn = r => el("button", { type: "button", class: "flag" + (r.urgent ? " on" : ""), "aria-pressed": r.urgent ? "true" : "false", title: r.urgent ? "Urgent. Click to unflag" : "Flag as urgent (adds it to Priorities)", "aria-label": (r.urgent ? "Unflag " : "Flag urgent: ") + r.dealer, text: "⚑", onclick: e => { e.stopPropagation(); toggleUrgent(r); } });
 // Age colours: green under 3 days, amber 3–7, red over 7
 const ageCls = d => d == null ? "" : d < 3 ? "age-ok" : d <= 7 ? "age-warn" : "age-bad";
 const agePill = d => d == null || d < 0 ? null : el("span", { class: "agepill " + ageCls(d), title: d === 0 ? "Came in today" : d + (d === 1 ? " day" : " days") + " waiting", text: d === 0 ? "today" : d + "d" });
@@ -296,7 +306,8 @@ function renderUploads() {
   if (S.upFilter) uf.replaceChildren("Uploaded " + (S.upFilter.from === S.upFilter.to ? fmtDate(S.upFilter.from) : fmtDate(S.upFilter.from) + " – " + fmtDate(S.upFilter.to)) + " ", el("button", { type: "button", "aria-label": "Clear date filter", text: "×", onclick: () => { S.upFilter = null; renderUploads(); } }));
   const { key, dir } = S.sort, order = Object.fromEntries(STATUSES.map(([s], i) => [s, i]));
   const val = r => key === "ccm" ? (ccmOf(r) || {}).ccm : key === "turn" ? turn(r) : key === "status" ? order[r.status] : key === "received_on" ? refDate(r) : r[key];
-  list.sort((a, b) => { const x = val(a), y = val(b); if (x == null && y == null) return 0; if (x == null) return 1; if (y == null) return -1; return (x < y ? -1 : x > y ? 1 : 0) * (dir === "asc" ? 1 : -1); });
+  const urg = r => (r.urgent || isHsUrgent(r)) ? 0 : 1;
+  list.sort((a, b) => { if (urg(a) !== urg(b)) return urg(a) - urg(b); const x = val(a), y = val(b); if (x == null && y == null) return 0; if (x == null) return 1; if (y == null) return -1; return (x < y ? -1 : x > y ? 1 : 0) * (dir === "asc" ? 1 : -1); });
   document.querySelectorAll("#p-uploads th[data-sort]").forEach(th => { th.classList.toggle("sorted", th.dataset.sort === key); th.classList.toggle("asc", th.dataset.sort === key && dir === "asc"); });
 
   $("rows").replaceChildren(...list.map(r => {
@@ -310,7 +321,7 @@ function renderUploads() {
     } else up = el("button", { type: "button", class: "markup", text: "✓ Mark uploaded", title: "Marks this list Uploaded today", onclick: e => { e.stopPropagation(); markUploaded(r); } });
     const tn = turn(r);
     return el("tr", { class: "click", onclick: () => openDrawer(r) }, [
-      el("td", { class: "dealer" }, [el("b", {}, [r.dealer, r.source === "hubspot" ? (ticketHref(r) ? el("a", { class: "src", href: ticketHref(r), target: "_blank", rel: "noopener", title: "Open ticket in HubSpot", text: "HubSpot ↗", onclick: e => e.stopPropagation() }) : el("span", { class: "src", text: "HubSpot" })) : null]), r.file_name ? el("small", { text: r.file_name }) : null, r.list_url ? el("a", { class: "listlink", href: r.list_url, target: "_blank", rel: "noopener", text: "Open list ↗", onclick: e => e.stopPropagation() }) : null, ticketHref(r) ? ticketLink(r, "View ticket #" + r.hubspot_ticket_id + " ↗", "listlink tixlink") : null, r.source === "hubspot" && r.hubspot_in_stage !== false && stageOf(r) !== "Upload Needed" ? el("div", { style: "margin-top:3px" }, stagePill(r)) : null]),
+      el("td", { class: "dealer" + (r.urgent || isHsUrgent(r) ? " urgentrow" : "") }, [el("b", {}, [flagBtn(r), r.dealer, isHsUrgent(r) && !r.urgent ? el("span", { class: "hsurgent", title: "Priority is Urgent in HubSpot", text: "URGENT" }) : null, r.source === "hubspot" ? (ticketHref(r) ? el("a", { class: "src", href: ticketHref(r), target: "_blank", rel: "noopener", title: "Open ticket in HubSpot", text: "HubSpot ↗", onclick: e => e.stopPropagation() }) : el("span", { class: "src", text: "HubSpot" })) : null]), r.file_name ? el("small", { text: r.file_name }) : null, r.list_url ? el("a", { class: "listlink", href: r.list_url, target: "_blank", rel: "noopener", text: "Open list ↗", onclick: e => e.stopPropagation() }) : null, ticketHref(r) ? ticketLink(r, "View ticket #" + r.hubspot_ticket_id + " ↗", "listlink tixlink") : null, r.source === "hubspot" && r.hubspot_in_stage !== false && stageOf(r) !== "Upload Needed" ? el("div", { style: "margin-top:3px" }, stagePill(r)) : null]),
       el("td", {}, ccmChip(r) || el("span", { class: "faint", text: "–" })),
       el("td", {}, r.list_type || el("span", { class: "late", text: "Set list type" })),
       el("td", {}, st),
@@ -641,8 +652,9 @@ function renderPrio() {
   if (!$("p-prio")) return;
   const mgr = isManager(), all = (S.prio || []).slice().sort((a, b) => a.pos - b.pos);
   const open = all.filter(x => !x.done), done = all.length - open.length, urgentOpen = open.filter(x => x.urgent).length;
-  $("n-prio").textContent = open.length || "";
-  $("n-prio").classList.toggle("hot", urgentOpen > 0);
+  const nLinked = urgentLinked().length;
+  $("n-prio").textContent = (open.length + nLinked) || "";
+  $("n-prio").classList.toggle("hot", urgentOpen + nLinked > 0);
   const last = all.reduce((m, x) => (x.updated_at || "") > m ? x.updated_at : m, "");
   const lastDay = last ? new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(last)) : "";
   $("prio-upd").textContent = last ? "Updated " + (lastDay === today() ? "today at " + new Date(last).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: TZ }) : fmtDate(lastDay)) : "Nothing here yet";
@@ -678,8 +690,22 @@ function renderPrio() {
   };
   const fill = (id, urgent, emptyText) => { const items = group(urgent); $(id).replaceChildren(...(items.length ? items : [el("li", { class: "gnone", text: emptyText })])); };
   fill("prio-urgent", true, mgr ? "Nothing urgent. Add one above and tick “Urgent”." : "Nothing urgent right now.");
+  const linked = urgentLinked().sort((a, b) => (refDate(a) || "") < (refDate(b) || "") ? -1 : 1);
+  if (linked.length) {
+    const typed = $("prio-urgent").querySelector(".gnone"); if (typed) typed.remove();
+    $("prio-urgent").append(el("li", { class: "glinkhead", text: "From uploads & HubSpot" }), ...linked.map(r => {
+      const d = days(refDate(r), today()), canMark = r.source !== "hubspot" || stageOf(r) === "Upload Needed";
+      return el("li", { class: "gitem glinked", onclick: () => openDrawer(r), title: "Open this list" }, [
+        el("span", { class: "gflagic", "aria-hidden": "true", text: "⚑" }),
+        el("span", { class: "gtext" }, [el("b", { text: r.dealer }), " · " + (r.list_type || r.hubspot_ticket_name || "List"),
+          el("span", { class: "gmeta" }, [r.urgent ? "Flagged" : "Urgent in HubSpot", r.source === "hubspot" ? " · " + stageOf(r) : "", " · ", agePill(d)])]),
+        el("span", { class: "gtools" }, [
+          canMark ? el("button", { type: "button", class: "gflag", text: "Mark uploaded", onclick: e => { e.stopPropagation(); markUploaded(r); } }) : null,
+          r.urgent ? el("button", { type: "button", "aria-label": "Unflag " + r.dealer, title: "Unflag", text: "×", onclick: e => { e.stopPropagation(); toggleUrgent(r); } }) : null])]);
+    }));
+  }
   fill("prio-later", false, mgr ? "Add priorities above." : "Nothing here right now.");
-  $("prio-un").textContent = all.filter(x => x.urgent && !x.done).length || "";
+  $("prio-un").textContent = (all.filter(x => x.urgent && !x.done).length + urgentLinked().length) || "";
   $("prio-ln").textContent = all.filter(x => !x.urgent && !x.done).length || "";
 }
 (function wirePrio() {
@@ -927,7 +953,7 @@ function renderHubspot() {
 }
 function hsCard(r) {
   const pr = prioOf(r), m = ccmOf(r), href = ticketHref(r);
-  return el("article", { class: "bcard", tabindex: "0", onclick: () => openDrawer(r), onkeydown: e => { if (e.key === "Enter") openDrawer(r); } }, [
+  return el("article", { class: "bcard" + (r.urgent ? " flagged" : ""), tabindex: "0", onclick: () => openDrawer(r), onkeydown: e => { if (e.key === "Enter") openDrawer(r); } }, [
     el(href ? "a" : "b", { class: "btitle", href, target: href ? "_blank" : null, rel: href ? "noopener" : null, title: href ? "Open in HubSpot" : null, text: r.hubspot_ticket_name || "Ticket #" + r.hubspot_ticket_id, onclick: e => e.stopPropagation() }),
     el("p", { class: "bline" }, el("span", { class: "agetext " + ageCls(r.hubspot_created_at ? days(new Date(r.hubspot_created_at).toLocaleDateString("en-CA", { timeZone: TZ }), today()) : null), text: openFor(r) })),
     el("p", { class: "bline" }, ["Ticket owner: ", el("span", { text: r.hubspot_owner || "Unassigned" })]),
@@ -935,6 +961,7 @@ function hsCard(r) {
     pr ? el("div", { class: "bsec" }, el("span", { class: "prio " + prioCls(pr) }, [el("i"), pr])) : null,
     el("div", { class: "bsec bco" }, [el("span", { class: "bicon", "aria-hidden": "true", text: "▦" }), el("span", { class: "bdealer", text: r.dealer }), m ? el("span", { class: "ccm " + (CCM_CLS[m.ccm] || "") + (m.sure ? "" : " maybe"), title: "CCM: " + m.ccm, text: m.ccm + (m.sure ? "" : "?") }) : null]),
     el("div", { class: "bfoot" }, [
+      flagBtn(r),
       r.hubspot_last_activity ? el("span", { class: "bact", title: "Last activity " + new Date(r.hubspot_last_activity).toLocaleString("en-US", { timeZone: TZ }) }, ["⏱ ", ago(r.hubspot_last_activity)]) : el("span", { class: "bact faint", text: "No activity yet" }),
       r.list_url ? el("a", { class: "listlink", href: r.list_url, target: "_blank", rel: "noopener", text: "Open list ↗", onclick: e => e.stopPropagation() }) : null])]);
 }
