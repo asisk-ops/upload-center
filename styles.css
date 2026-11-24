@@ -530,3 +530,15 @@ a.btitle:hover{text-decoration:underline}
 .markup:hover{filter:brightness(1.08)}
 .markup:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
 .toastbtn{margin-left:8px;background:none;border:1px solid currentColor;color:inherit;border-radius:6px;padding:2px 9px;font:700 12.5px var(--body);cursor:pointer}
+
+/* Age colours */
+:root{--age-ok:#2f7d3a;--age-okbg:#e2f3e4;--age-warn:#9a5b00;--age-warnbg:#fdf0d5;--age-bad:#b3261e;--age-badbg:#fde4e1}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--age-ok:#7fd68b;--age-okbg:#183020;--age-warn:#f3c06b;--age-warnbg:#3a2c12;--age-bad:#ff9a8f;--age-badbg:#3d1a17}}
+:root[data-theme="dark"]{--age-ok:#7fd68b;--age-okbg:#183020;--age-warn:#f3c06b;--age-warnbg:#3a2c12;--age-bad:#ff9a8f;--age-badbg:#3d1a17}
+.camein{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.agepill{font:700 11px var(--body);padding:1px 7px;border-radius:999px}
+.agepill.age-ok{color:var(--age-ok);background:var(--age-okbg)}
+.agepill.age-warn{color:var(--age-warn);background:var(--age-warnbg)}
+.agepill.age-bad{color:var(--age-bad);background:var(--age-badbg)}
+.agetext.age-ok{color:var(--age-ok)}.agetext.age-warn{color:var(--age-warn);font-weight:700}.agetext.age-bad{color:var(--age-bad);font-weight:700}
+#fo{width:auto;min-width:140px}

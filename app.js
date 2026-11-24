@@ -263,6 +263,10 @@ function kpi(cls, k, v, s, onclick, unit) {
 }
 function setStatus(st) { S.upFilter = null; S.status = st; store.set("du-status", st); renderUploads(); $("rows").closest(".card").scrollIntoView({ behavior: "smooth", block: "start" }); }
 
+// Age colours: green under 3 days, amber 3–7, red over 7
+const ageCls = d => d == null ? "" : d < 3 ? "age-ok" : d <= 7 ? "age-warn" : "age-bad";
+const agePill = d => d == null || d < 0 ? null : el("span", { class: "agepill " + ageCls(d), title: d === 0 ? "Came in today" : d + (d === 1 ? " day" : " days") + " waiting", text: d === 0 ? "today" : d + "d" });
+const ownerPick = () => S.uOwner ?? (store.get("du-uowner") ?? (isManager() ? "" : "me"));
 function renderUploads() {
   const R = S.uploads.filter(live), t = today(), month = t.slice(0, 7);
   const exp = R.filter(r => r.status === "Expected"), late = exp.filter(isLate), iss = R.filter(r => r.status === "Issues"), rdy = R.filter(r => r.status === "Ready"), hold = R.filter(r => r.status === "OnHold");
@@ -283,7 +287,10 @@ function renderUploads() {
   const q = S.q.toLowerCase();
   // Without a date drill-down from the chart, the table shows only lists in HubSpot's Upload Needed stage.
   let list = (S.upFilter ? S.uploads.filter(r => r.uploaded_on && r.uploaded_on >= S.upFilter.from && r.uploaded_on <= S.upFilter.to) : needList())
+    .filter(r => { const o = ownerPick(); return !o || (o === "me" ? r.owner_id === meId() : o === "none" ? !r.owner_id : r.owner_id === o); })
     .filter(r => (!S.type || r.list_type === S.type) && (!q || [r.dealer, r.file_name, r.notes, r.hubspot_ticket_name, r.hubspot_ticket_id, (ccmOf(r) || {}).ccm].join(" ").toLowerCase().includes(q)));
+  { const sel = $("fo"), cur = ownerPick(), ids = [...new Set(S.uploads.map(r => r.owner_id).filter(Boolean))].filter(id => S.profiles[id]).sort((a, b) => name(a).localeCompare(name(b)));
+    sel.replaceChildren(...[["", "All owners"], ["me", "My lists"], ...ids.filter(id => id !== meId()).map(id => [id, name(id)]), ["none", "Unassigned"]].map(([v, l]) => { const o = el("option", { value: v, text: l }); o.selected = v === cur; return o; })); }
   $("u-title").textContent = S.upFilter ? "Uploaded lists" : "Upload Needed"; $("u-count").textContent = list.length + (list.length === 1 ? " list" : " lists");
   const uf = $("upchip"); uf.hidden = !S.upFilter;
   if (S.upFilter) uf.replaceChildren("Uploaded " + (S.upFilter.from === S.upFilter.to ? fmtDate(S.upFilter.from) : fmtDate(S.upFilter.from) + " – " + fmtDate(S.upFilter.to)) + " ", el("button", { type: "button", "aria-label": "Clear date filter", text: "×", onclick: () => { S.upFilter = null; renderUploads(); } }));
@@ -307,7 +314,7 @@ function renderUploads() {
       el("td", {}, ccmChip(r) || el("span", { class: "faint", text: "–" })),
       el("td", {}, r.list_type || el("span", { class: "late", text: "Set list type" })),
       el("td", {}, st),
-      el("td", {}, r.received_on ? fmtDate(r.received_on) : (r.due_on ? el("span", {}, [el("span", { class: "faint", text: "due " + fmtDate(r.due_on) + " " }), isLate(r) ? el("span", { class: "late", text: "Late" }) : null]) : el("span", { class: "faint", text: "–" }))),
+      el("td", {}, r.received_on ? el("span", { class: "camein" }, [fmtDate(r.received_on), r.status !== "Loaded" ? agePill(days(r.received_on, t)) : null]) : (r.due_on ? el("span", {}, [el("span", { class: "faint", text: "due " + fmtDate(r.due_on) + " " }), isLate(r) ? el("span", { class: "late", text: "Late" }) : null]) : el("span", { class: "faint", text: "–" }))),
       el("td", {}, up),
       el("td", { class: "num" }, tn == null || tn < 0 ? el("span", { class: "faint", text: "–" }) : (tn === 0 ? "Same day" : tn + (tn === 1 ? " day" : " days"))),
       el("td", { class: "num", text: fmt(r.row_count) }),
@@ -419,6 +426,7 @@ async function quickUploaded(r, date) {
 (() => { const d = $("ustats"); try { d.open = store.get("du-ustats") === "1"; } catch (e) {} d.addEventListener("toggle", () => { store.set("du-ustats", d.open ? "1" : "0"); if (d.open) render(); }); })();
 $("q").addEventListener("input", e => { S.q = e.target.value; renderUploads(); });
 $("ft").addEventListener("change", e => { S.type = e.target.value; renderUploads(); });
+$("fo").addEventListener("change", e => { S.uOwner = e.target.value; store.set("du-uowner", e.target.value); renderUploads(); });
 document.querySelectorAll("#p-uploads th[data-sort]").forEach(th => th.addEventListener("click", () => { const k = th.dataset.sort; S.sort = { key: k, dir: S.sort.key === k && S.sort.dir === "desc" ? "asc" : "desc" }; renderUploads(); }));
 $("add").addEventListener("click", () => openDrawer(null));
 $("export").addEventListener("click", () => {
@@ -613,7 +621,7 @@ function renderToday() {
   $("it-today").addEventListener("click", () => { S.itDay = today(); renderToday(); });
   $("it-edit").addEventListener("click", () => { S.itEdit = !S.itEdit; renderToday(); });
   $("it-user").addEventListener("change", e => { S.itUser = e.target.value; S.itWinDraft = null; store.set("du-ituser", e.target.value); renderToday(); api.reloadItin().then(renderToday).catch(() => {}); });
-  S.itUser = store.get("du-ituser") || null;
+  S.itUser = null;  // always start on the signed-in person's own list; managers can switch with the dropdown
   $("it-form").addEventListener("submit", async e => {
     e.preventDefault(); const text = $("it-text").value.trim(); if (!text) return $("it-text").focus();
     const routine = !!S.itEdit, day = routine ? ROUTINE_DAY : (S.itDay || today());
@@ -898,7 +906,7 @@ function renderHubspot() {
         el("td", {}, el("span", { class: "bstage", text: r.hubspot_stage || "Upload Needed" })),
         el("td", {}, pr ? el("span", { class: "prio " + prioCls(pr) }, [el("i"), pr]) : el("span", { class: "faint", text: "–" })),
         el("td", { text: r.hubspot_owner || "Unassigned" }),
-        el("td", {}, a == null ? "–" : el("span", { class: a > 7 ? "late" : "", text: a === 0 ? "Today" : a + (a === 1 ? " day" : " days") })),
+        el("td", {}, a == null ? "–" : el("span", { class: "agetext " + ageCls(a), text: a === 0 ? "Today" : a + (a === 1 ? " day" : " days") })),
         el("td", {}, r.list_url ? el("a", { class: "listlink", href: r.list_url, target: "_blank", rel: "noopener", text: "Open list ↗", onclick: e => e.stopPropagation() }) : el("span", { class: "faint", text: "No link yet" })), el("td", {}, st)]);
     };
     $("hs-rows").replaceChildren(...sorted.map(row));
@@ -921,7 +929,7 @@ function hsCard(r) {
   const pr = prioOf(r), m = ccmOf(r), href = ticketHref(r);
   return el("article", { class: "bcard", tabindex: "0", onclick: () => openDrawer(r), onkeydown: e => { if (e.key === "Enter") openDrawer(r); } }, [
     el(href ? "a" : "b", { class: "btitle", href, target: href ? "_blank" : null, rel: href ? "noopener" : null, title: href ? "Open in HubSpot" : null, text: r.hubspot_ticket_name || "Ticket #" + r.hubspot_ticket_id, onclick: e => e.stopPropagation() }),
-    el("p", { class: "bline", text: openFor(r) }),
+    el("p", { class: "bline" }, el("span", { class: "agetext " + ageCls(r.hubspot_created_at ? days(new Date(r.hubspot_created_at).toLocaleDateString("en-CA", { timeZone: TZ }), today()) : null), text: openFor(r) })),
     el("p", { class: "bline" }, ["Ticket owner: ", el("span", { text: r.hubspot_owner || "Unassigned" })]),
     el("p", { class: "bline" }, ["Create date: " + mdy(r.hubspot_created_at)]),
     pr ? el("div", { class: "bsec" }, el("span", { class: "prio " + prioCls(pr) }, [el("i"), pr])) : null,
