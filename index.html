@@ -1,13 +1,16 @@
 <!doctype html>
-<html lang="en">
+<!-- Look: data-look="flow" = Pipeline Flow (Option B). Other options: "" (navy Command Center) or "editorial". -->
+<html lang="en" data-theme="light" data-look="flow">
 <head>
 <meta charset="utf-8">
+<meta name="color-scheme" content="light">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>CallSource Data Upload Center</title>
 <link rel="icon" href="logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@500;600;700;800&family=Dancing+Script:wght@700&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@500&display=swap">
 <link rel="stylesheet" href="styles.css?v=20261124d">
+<link rel="stylesheet" href="executive.css?v=20261127a">
 </head>
 <body>
 
@@ -17,9 +20,15 @@
     <img src="logo.png" alt="CallSource Automotive">
     <h1>Data Upload Center</h1>
     <p>Track every dealer list from the day it comes in to the day it's uploaded.</p>
+    <ul class="auth-points">
+      <li>Live pipeline of every dealer list</li>
+      <li>HubSpot tickets synced every 15 minutes</li>
+      <li>Turnaround and volume reporting at a glance</li>
+    </ul>
   </div>
   <form id="authform" class="auth-card" novalidate>
     <h2 id="auth-title">Sign in</h2>
+    <p class="auth-kicker">Use your CallSource work account.</p>
     <label class="fld" id="row-name" hidden><span>Full name</span><input id="a-name" autocomplete="name"></label>
     <label class="fld"><span>Work email</span><input id="a-email" type="email" autocomplete="email" required placeholder="you@company.com"></label>
     <label class="fld" id="row-pass"><span>Password</span><input id="a-pass" type="password" autocomplete="current-password" minlength="8" required></label>
@@ -34,11 +43,13 @@
   <aside class="side">
     <div class="side-brand"><img src="logo.png" alt="CallSource Automotive"><span>Data Upload Center</span></div>
     <nav class="nav" id="nav">
+      <div class="nav-label">Operations</div>
       <button data-page="uploads" class="active"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 4h14M3 10h14M3 16h9"/></svg>Uploads<em id="n-open"></em></button>
       <button data-page="today"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 5l2 2 3-3M4 11l2 2 3-3M11 6h6M11 12h6M4 17h13"/></svg>Today<em id="n-today"></em></button>
       <button data-page="prio"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 17s-6-3.6-6-8.2A3.3 3.3 0 0 1 10 6.6a3.3 3.3 0 0 1 6 2.2C16 13.4 10 17 10 17z"/></svg>Priorities<em id="n-prio"></em></button>
       <button data-page="hubspot"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="3"/><path d="M10 2v5M10 13v5M2 10h5M13 10h5"/></svg>HubSpot queue<em id="n-hs"></em></button>
       <button data-page="calendar"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5h14v12H3zM3 9h14M7 3v4M13 3v4"/></svg>Daily pulls</button>
+      <div class="nav-label">Tools &amp; reference</div>
       <button data-page="checker"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10l4 4 8-9"/></svg>File checker</button>
       <button data-page="template"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 2h7l4 4v12H5zM12 2v4h4"/></svg>Template</button>
     </nav>
@@ -53,10 +64,40 @@
 
     <!-- UPLOADS -->
     <section class="page" id="p-uploads">
-      <header class="phead">
-        <div><h1>Uploads</h1><p class="sub" id="u-sub">Every dealer list, from the day it comes in to the day it's uploaded.</p></div>
-        <div class="actions"><button class="btn ghost" id="export">Export CSV</button><button class="btn" id="add">+ Log upload</button></div>
+      <header class="xhero">
+        <div>
+          <p class="xkick">Operations overview</p>
+          <h1>Uploads</h1>
+          <p class="sub" id="u-sub">Every dealer list, from the day it comes in to the day it's uploaded.</p>
+          <div class="xmeta"><span id="x-date"></span><span>HubSpot sync every 15 min</span></div>
+          <div class="actions"><button class="btn ghost" id="export">Export CSV</button><button class="btn" id="add">+ Log upload</button></div>
+        </div>
+        <div class="xgauge" id="x-gauge"></div>
+        <div class="xflow" id="x-flow"></div>
       </header>
+      <div class="xsec"><h2>Key metrics</h2><span>Click a card to filter the worklist</span></div>
+      <section class="ustats xopen" id="ustats">
+        <div class="kpis" id="kpis"></div>
+        <div class="grid">
+          <div class="card c-8">
+            <div class="drhead"><div class="ctitle" id="dr-title" style="margin:0">Daily uploads</div>
+              <div class="drange">
+                <select id="dr-preset" aria-label="Date range"></select>
+                <input type="date" id="dr-from" aria-label="From date"><span class="faint">to</span><input type="date" id="dr-to" aria-label="To date">
+              </div></div>
+            <div class="dstats" id="dr-stats"></div>
+            <div id="daily"></div>
+            <p class="faint" id="dr-empty" hidden style="margin:4px 0 0;font-size:12.5px">Nothing was uploaded in these dates.</p>
+          </div>
+          <div class="card c-4">
+            <div class="ctitle">Pipeline mix</div>
+            <div id="x-mix" class="xmix"></div>
+            <div class="xdiv"></div>
+            <div class="ctitle">Upload Needed by list type</div><div id="bytype"></div>
+          </div>
+        </div>
+      </section>
+      <div class="xsec"><h2>Worklist</h2><span>Sort any column; click a row to open it</span></div>
       <div class="card flush">
         <div class="tbar">
           <div class="utitle"><h2 id="u-title">Upload Needed</h2><span class="faint" id="u-count"></span></div>
@@ -78,23 +119,6 @@
         </table></div>
         <div class="empty" id="empty" hidden></div>
       </div>
-      <details class="ustats" id="ustats">
-        <summary><span>Stats &amp; trends</span><span class="faint" id="ustats-hint">KPIs, daily uploads chart, list types</span></summary>
-        <div class="kpis" id="kpis"></div>
-        <div class="grid">
-          <div class="card c-8">
-            <div class="drhead"><div class="ctitle" id="dr-title" style="margin:0">Daily uploads</div>
-              <div class="drange">
-                <select id="dr-preset" aria-label="Date range"></select>
-                <input type="date" id="dr-from" aria-label="From date"><span class="faint">to</span><input type="date" id="dr-to" aria-label="To date">
-              </div></div>
-            <div class="dstats" id="dr-stats"></div>
-            <div id="daily"></div>
-            <p class="faint" id="dr-empty" hidden style="margin:4px 0 0;font-size:12.5px">Nothing was uploaded in these dates.</p>
-          </div>
-          <div class="card c-4"><div class="ctitle">Upload Needed by list type</div><div id="bytype"></div></div>
-        </div>
-      </details>
     </section>
 
     <!-- HUBSPOT -->
@@ -304,5 +328,6 @@
 <script src="config.js?v=20261015b"></script>
 <script src="rules.js?v=20261022b"></script>
 <script src="app.js?v=20261124d"></script>
+<script src="exec.js?v=20261127a"></script>
 </body>
 </html>
