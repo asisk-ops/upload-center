@@ -88,6 +88,40 @@
     new MutationObserver(fn).observe(el, { childList: true, subtree: true });
     fn();
   }
+  // Customer rows are formatted/uploaded manually, so hide row-count readouts
+  function hideRows() {
+    document.querySelectorAll("#kpis .kpi .s").forEach(function (el) {
+      if (/customer rows/i.test(el.textContent)) el.textContent = "Lists completed";
+    });
+    document.querySelectorAll("#dr-stats .dstat").forEach(function (el) {
+      if (/customer rows/i.test(el.textContent)) el.style.display = "none";
+    });
+    document.querySelectorAll("#daily title").forEach(function (t) {
+      var v = t.textContent.replace(/ · [\d,]+ rows?/, "");
+      if (v !== t.textContent) t.textContent = v;
+    });
+  }
+  // Sign-out safety net: if the normal sign-out hasn't returned to the sign-in
+  // screen after a moment (e.g. the auth call stalls), clear this browser's
+  // session locally and reload.
+  var so = $("signout");
+  if (so) so.addEventListener("click", function () {
+    if (typeof sb === "undefined" || !sb) return; // demo mode
+    setTimeout(function () {
+      if ($("app").hidden) return; // signed out normally
+      Promise.resolve().then(function () { return sb.auth.signOut({ scope: "local" }); }).catch(function () {}).then(function () {
+        setTimeout(function () {
+          if ($("app").hidden) return;
+          try { Object.keys(localStorage).forEach(function (k) { if (/^sb-.*-auth-token/.test(k)) localStorage.removeItem(k); }); } catch (e) {}
+          location.reload();
+        }, 800);
+      });
+    }, 1500);
+  });
+
+  watch("kpis", hideRows);
+  watch("dr-stats", hideRows);
+  watch("daily", hideRows);
   watch("kpis", renderExec);
   watch("daily", decorateDaily);
 })();
